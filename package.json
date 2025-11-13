@@ -1,7 +1,10 @@
 {
-  "name": "hello",
+  "name": "otamatone-roll",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=25.2.0"
+  },
   "dependencies": {
     "abcjs": "^6.5.2",
     "react": "^18.2.0",
