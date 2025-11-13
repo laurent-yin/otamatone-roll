@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '25.2.0'
+          node-version: '22.20.0'
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
