@@ -1,5 +1,24 @@
-# React basic
+# Otamatone Roll
 
-[Azure Static Web Apps](https://docs.microsoft.com/azure/static-web-apps/overview) allows you to easily build [React](https://reactjs.org/) apps in minutes. Use this repo with the [React quickstart](https://docs.microsoft.com/azure/static-web-apps/getting-started?tabs=react) to build and customize a new static site.
+Otamatone visualization of tunes using ABC notation.
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## 🔗 Quick Links
+
+- **Live App**: https://jolly-mushroom-07fca3310.3.azurestaticapps.net/
+- **GitHub Actions**: https://github.com/laurent-yin/otamatone-roll/actions
+- **Repository**: https://github.com/laurent-yin/otamatone-roll
+
+## 🚀 Development
+
+Built with:
+- React 18
+- TypeScript
+- Vite
+- abcjs
+
+### Local Development
+
+```bash
+npm install
+npm run dev
+```
