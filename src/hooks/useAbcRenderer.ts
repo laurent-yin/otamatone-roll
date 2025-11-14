@@ -10,10 +10,13 @@ export const useAbcRenderer = ({
   notation,
   containerId,
 }: UseAbcRendererProps) => {
-  const hasRendered = useRef(false);
+  const previousNotation = useRef<string>('');
 
   useEffect(() => {
-    if (hasRendered.current) return;
+    console.log('useAbcRenderer:', { notation, containerId });
+    
+    // Only re-render if notation actually changed
+    if (previousNotation.current === notation && notation !== '') return;
 
     const container = document.getElementById(containerId);
     if (!container) {
@@ -21,9 +24,15 @@ export const useAbcRenderer = ({
       return;
     }
 
+    if (!notation || notation.trim() === '') {
+      console.warn('Empty notation provided');
+      return;
+    }
+
     try {
       abcjs.renderAbc(containerId, notation);
-      hasRendered.current = true;
+      previousNotation.current = notation;
+      console.log('ABC rendered successfully');
     } catch (error) {
       console.error('Error rendering ABC notation:', error);
     }
