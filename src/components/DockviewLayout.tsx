@@ -21,16 +21,11 @@ const EditorPanel = (
   }>
 ) => {
   return (
-    <AbcEditor
-      value={props.params.notation}
-      onChange={props.params.onChange}
-    />
+    <AbcEditor value={props.params.notation} onChange={props.params.onChange} />
   );
 };
 
-const PreviewPanel = (
-  props: IDockviewPanelProps<{ notation: string }>
-) => {
+const PreviewPanel = (props: IDockviewPanelProps<{ notation: string }>) => {
   const notation = props.params?.notation || '';
   const containerId = props.api?.id
     ? `abc-preview-${props.api.id}`

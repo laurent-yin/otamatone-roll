@@ -14,7 +14,7 @@ export const useAbcRenderer = ({
 
   useEffect(() => {
     console.log('useAbcRenderer:', { notation, containerId });
-    
+
     // Only re-render if notation actually changed
     if (previousNotation.current === notation && notation !== '') return;
 
