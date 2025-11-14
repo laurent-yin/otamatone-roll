@@ -1,22 +1,16 @@
-import React, { useEffect } from 'react';
-import abcjs from 'abcjs';
+import { AbcNotationViewer } from './components/AbcNotationViewer';
+import { DEFAULT_ABC_NOTATION } from './constants/abc-notation';
 
-const abc: string = `X:1
-T:Notes / pitches
-M:C
-L:1/4
-K:C treble
-C, C E, E | G, A, B, C | D E F G | A B c d | e f g a | b c' d' e' | f' g' a' b' |]`;
-
-const App: React.FC = () => {
-  useEffect(() => {
-    abcjs.renderAbc('abcjs-container', abc);
-  }, []);
-
+const App = () => {
   return (
-    <div>
-      <h1>Otamatone Roll</h1>
-      <div id="abcjs-container"></div>
+    <div className="app">
+      <header className="app-header">
+        <h1>Otamatone Roll</h1>
+        <p>ABC Notation Renderer</p>
+      </header>
+      <main className="app-main">
+        <AbcNotationViewer notation={DEFAULT_ABC_NOTATION} />
+      </main>
     </div>
   );
 };
