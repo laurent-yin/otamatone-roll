@@ -4,16 +4,20 @@ import abcjs from 'abcjs';
 interface UseAbcRendererProps {
   notation: string;
   containerId: string;
+  audioContainerId?: string;
 }
 
 export const useAbcRenderer = ({
   notation,
   containerId,
+  audioContainerId,
 }: UseAbcRendererProps) => {
   const previousNotation = useRef<string>('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const synthControlRef = useRef<any>(null);
 
   useEffect(() => {
-    console.log('useAbcRenderer:', { notation, containerId });
+    console.log('useAbcRenderer:', { notation, containerId, audioContainerId });
 
     // Only re-render if notation actually changed
     if (previousNotation.current === notation && notation !== '') return;
@@ -30,11 +34,45 @@ export const useAbcRenderer = ({
     }
 
     try {
-      abcjs.renderAbc(containerId, notation);
+      const visualObj = abcjs.renderAbc(containerId, notation, {
+        responsive: 'resize',
+      });
       previousNotation.current = notation;
       console.log('ABC rendered successfully');
+
+      // Set up audio playback if audioContainerId is provided
+      if (audioContainerId && visualObj && visualObj[0]) {
+        const audioContainer = document.getElementById(audioContainerId);
+        if (audioContainer) {
+          // Clean up previous synth controller
+          if (synthControlRef.current) {
+            synthControlRef.current.destroy();
+          }
+
+          // Create new synth controller
+          const synthControl = new abcjs.synth.SynthController();
+          synthControl.load(audioContainer, null, {
+            displayLoop: true,
+            displayRestart: true,
+            displayPlay: true,
+            displayProgress: true,
+            displayWarp: true,
+          });
+          synthControl.setTune(visualObj[0], false);
+          synthControlRef.current = synthControl;
+          console.log('Audio controls loaded successfully');
+        }
+      }
     } catch (error) {
       console.error('Error rendering ABC notation:', error);
     }
-  }, [notation, containerId]);
+
+    return () => {
+      // Clean up synth controller on unmount
+      if (synthControlRef.current) {
+        synthControlRef.current.destroy();
+        synthControlRef.current = null;
+      }
+    };
+  }, [notation, containerId, audioContainerId]);
 };

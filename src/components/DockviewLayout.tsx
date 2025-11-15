@@ -33,9 +33,6 @@ const PreviewPanel = (props: IDockviewPanelProps<{ notation: string }>) => {
 
   return (
     <div className="preview-panel">
-      <div className="preview-panel-header">
-        <h3>Preview</h3>
-      </div>
       <AbcNotationViewer notation={notation} containerId={containerId} />
     </div>
   );
@@ -84,7 +81,7 @@ export const DockviewLayout = ({
           },
         };
       },
-      className: 'dockview-theme-abyss',
+      className: 'dockview-theme-replit',
     });
 
     setDockview(dockviewInstance.api);

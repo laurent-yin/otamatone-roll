@@ -39,9 +39,6 @@ export const AbcEditor = ({ value, onChange }: AbcEditorProps) => {
 
   return (
     <div className="abc-editor">
-      <div className="abc-editor-header">
-        <h3>ABC Notation Editor</h3>
-      </div>
       <textarea
         ref={textareaRef}
         className="abc-editor-textarea"
