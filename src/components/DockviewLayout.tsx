@@ -105,7 +105,10 @@ export const DockviewLayout = ({
     const availableForEditor = containerWidth - MIN_RIGHT_SPACE;
     const width = Math.max(
       MIN_WIDTH,
-      Math.min(TARGET_WIDTH, availableForEditor > 0 ? availableForEditor : TARGET_WIDTH)
+      Math.min(
+        TARGET_WIDTH,
+        availableForEditor > 0 ? availableForEditor : TARGET_WIDTH
+      )
     );
 
     editorPanelRef.current.group.api.setSize({ width });
