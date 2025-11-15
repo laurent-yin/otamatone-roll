@@ -5,12 +5,16 @@ interface UseAbcRendererProps {
   notation: string;
   containerId: string;
   audioContainerId?: string;
+  onCurrentTimeChange?: (currentTime: number) => void;
+  onPlayingChange?: (isPlaying: boolean) => void;
 }
 
 export const useAbcRenderer = ({
   notation,
   containerId,
   audioContainerId,
+  onCurrentTimeChange,
+  onPlayingChange,
 }: UseAbcRendererProps) => {
   const previousNotation = useRef<string>('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -58,8 +62,65 @@ export const useAbcRenderer = ({
             displayProgress: true,
             displayWarp: true,
           });
-          synthControl.setTune(visualObj[0], false);
+
+          // Create TimingCallbacks for accurate playback synchronization
+          console.log('Creating TimingCallbacks');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const timingCallbacks = new (abcjs.TimingCallbacks as any)(
+            visualObj[0],
+            {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              eventCallback: (event: any) => {
+                console.log('eventCallback called:', event);
+                if (event && typeof event.milliseconds === 'number') {
+                  const currentTime = event.milliseconds / 1000;
+                  console.log('Setting currentTime to:', currentTime);
+                  onCurrentTimeChange?.(currentTime);
+                }
+              },
+            }
+          );
+
+          // Set the tune with timing callbacks
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          synthControl.setTune(visualObj[0], false, { timingCallbacks } as any);
+
+          // Start the timing callbacks when play button is clicked
+          const playButton = audioContainer.querySelector(
+            '.abcjs-midi-start'
+          ) as HTMLElement;
+          if (playButton) {
+            playButton.addEventListener('click', () => {
+              console.log('Play button clicked, starting timingCallbacks');
+              timingCallbacks.start();
+            });
+          }
+
+          const resetButton = audioContainer.querySelector(
+            '.abcjs-midi-reset'
+          ) as HTMLElement;
+          if (resetButton) {
+            resetButton.addEventListener('click', () => {
+              console.log('Reset button clicked, stopping timingCallbacks');
+              timingCallbacks.stop();
+              onCurrentTimeChange?.(0);
+            });
+          }
+
+          // Track playing state by checking the play button class
+          if (onPlayingChange) {
+            const checkPlayingState = setInterval(() => {
+              const isPlaying =
+                playButton?.classList.contains('abcjs-midi-playing') || false;
+              onPlayingChange(isPlaying);
+            }, 50);
+
+            synthControlRef.current._stateInterval = checkPlayingState;
+          }
+
           synthControlRef.current = synthControl;
+          synthControlRef.current._timingCallbacks = timingCallbacks;
+
           console.log('Audio controls loaded successfully');
         }
       }
@@ -70,9 +131,21 @@ export const useAbcRenderer = ({
     return () => {
       // Clean up synth controller on unmount
       if (synthControlRef.current) {
+        if (synthControlRef.current._stateInterval) {
+          clearInterval(synthControlRef.current._stateInterval);
+        }
+        if (synthControlRef.current._timingCallbacks) {
+          synthControlRef.current._timingCallbacks.stop();
+        }
         synthControlRef.current.destroy();
         synthControlRef.current = null;
       }
     };
-  }, [notation, containerId, audioContainerId]);
+  }, [
+    notation,
+    containerId,
+    audioContainerId,
+    onCurrentTimeChange,
+    onPlayingChange,
+  ]);
 };

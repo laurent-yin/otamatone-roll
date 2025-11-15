@@ -4,18 +4,28 @@ interface AbcNotationViewerProps {
   notation: string;
   containerId?: string;
   showAudioControls?: boolean;
+  onCurrentTimeChange?: (time: number) => void;
+  onPlayingChange?: (playing: boolean) => void;
 }
 
 export const AbcNotationViewer = ({
   notation,
   containerId = 'abc-notation-container',
   showAudioControls = true,
+  onCurrentTimeChange,
+  onPlayingChange,
 }: AbcNotationViewerProps) => {
   const audioContainerId = showAudioControls
     ? `${containerId}-audio`
     : undefined;
 
-  useAbcRenderer({ notation, containerId, audioContainerId });
+  useAbcRenderer({
+    notation,
+    containerId,
+    audioContainerId,
+    onCurrentTimeChange,
+    onPlayingChange,
+  });
 
   return (
     <div className="abc-notation-viewer">
