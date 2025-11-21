@@ -1,8 +1,4 @@
-import {
-  Note,
-  NoteCharTimeMap,
-  NoteTimeline,
-} from '../types/music';
+import { Note, NoteCharTimeMap, NoteTimeline } from '../types/music';
 
 export interface VisualObjWithTimings {
   getMeterFraction?: () => { num?: number; den?: number };

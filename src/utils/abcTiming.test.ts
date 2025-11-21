@@ -20,10 +20,7 @@ describe('buildTimingDerivedData', () => {
         duration: 500,
         startCharArray: [4, 5],
         endCharArray: [6, 7],
-        midiPitches: [
-          { pitch: 60, volume: 90 },
-          { pitch: 64 },
-        ],
+        midiPitches: [{ pitch: 60, volume: 90 }, { pitch: 64 }],
       },
       {
         type: 'event',
@@ -130,7 +127,8 @@ C _D D _E | E F _G G |
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const timingCallbacks = new (abcjs.TimingCallbacks as any)(visualObj, {});
-    const timings = (timingCallbacks as { noteTimings?: TimingEvent[] }).noteTimings;
+    const timings = (timingCallbacks as { noteTimings?: TimingEvent[] })
+      .noteTimings;
 
     expect(timings).toBeDefined();
     expect(timings && timings.length).toBeGreaterThanOrEqual(8);

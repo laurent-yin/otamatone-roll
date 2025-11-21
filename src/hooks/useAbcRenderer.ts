@@ -1,6 +1,10 @@
 import { useEffect, useRef } from 'react';
 import abcjs from 'abcjs';
-import { NoteCharTimeMap, NotePlaybackEvent, NoteTimeline } from '../types/music';
+import {
+  NoteCharTimeMap,
+  NotePlaybackEvent,
+  NoteTimeline,
+} from '../types/music';
 import {
   buildTimingDerivedData,
   TimingEvent,
@@ -84,7 +88,10 @@ export const useAbcRenderer = ({
           try {
             visualObjWithAudio.setUpAudio();
           } catch (audioPrepError) {
-            console.warn('abcjs setUpAudio failed; timing data may be incomplete', audioPrepError);
+            console.warn(
+              'abcjs setUpAudio failed; timing data may be incomplete',
+              audioPrepError
+            );
           }
         }
 
