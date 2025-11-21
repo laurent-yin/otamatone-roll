@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import abcjs from 'abcjs';
+import { NoteCharTimeMap, NotePlaybackEvent } from '../types/music';
 
 interface UseAbcRendererProps {
   notation: string;
@@ -7,6 +8,8 @@ interface UseAbcRendererProps {
   audioContainerId?: string;
   onCurrentTimeChange?: (currentTime: number) => void;
   onPlayingChange?: (isPlaying: boolean) => void;
+  onNoteEvent?: (event: NotePlaybackEvent) => void;
+  onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
 }
 
 export const useAbcRenderer = ({
@@ -15,10 +18,13 @@ export const useAbcRenderer = ({
   audioContainerId,
   onCurrentTimeChange,
   onPlayingChange,
+  onNoteEvent,
+  onCharTimeMapChange,
 }: UseAbcRendererProps) => {
   const previousNotation = useRef<string>('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const synthControlRef = useRef<any>(null);
+  const eventSequenceRef = useRef(0);
 
   useEffect(() => {
     console.log('useAbcRenderer:', { notation, containerId, audioContainerId });
@@ -26,16 +32,22 @@ export const useAbcRenderer = ({
     // Only re-render if notation actually changed
     if (previousNotation.current === notation && notation !== '') return;
 
+    eventSequenceRef.current = 0;
+
     const container = document.getElementById(containerId);
     if (!container) {
       console.error(`Container with id "${containerId}" not found`);
+      onCharTimeMapChange?.({});
       return;
     }
 
     if (!notation || notation.trim() === '') {
       console.warn('Empty notation provided');
+      onCharTimeMapChange?.({});
       return;
     }
+
+    onCharTimeMapChange?.({});
 
     try {
       const visualObj = abcjs.renderAbc(containerId, notation, {
@@ -71,30 +83,221 @@ export const useAbcRenderer = ({
             {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               eventCallback: (event: any) => {
-                console.log('eventCallback called:', event);
+                console.log('abcjs timing event', {
+                  ms: event?.milliseconds,
+                  startChar: event?.startChar,
+                  startCharArray: event?.startCharArray,
+                  midiPitches: event?.midiPitches,
+                  duration: event?.duration,
+                });
                 if (event && typeof event.milliseconds === 'number') {
                   const currentTime = event.milliseconds / 1000;
                   console.log('Setting currentTime to:', currentTime);
                   onCurrentTimeChange?.(currentTime);
+
+                  if (onNoteEvent && Array.isArray(event.midiPitches)) {
+                    const midiPitches = event.midiPitches
+                      .map((pitch: unknown) => {
+                        if (typeof pitch === 'number') {
+                          return pitch;
+                        }
+                        if (
+                          pitch &&
+                          typeof pitch === 'object' &&
+                          typeof (pitch as { pitch?: number }).pitch ===
+                            'number'
+                        ) {
+                          return (pitch as { pitch: number }).pitch;
+                        }
+                        if (
+                          pitch &&
+                          typeof pitch === 'object' &&
+                          typeof (pitch as { midi?: number }).midi === 'number'
+                        ) {
+                          return (pitch as { midi: number }).midi;
+                        }
+                        return undefined;
+                      })
+                      .filter(
+                        (value: number | undefined): value is number =>
+                          typeof value === 'number'
+                      );
+
+                    if (midiPitches.length > 0) {
+                      eventSequenceRef.current += 1;
+                      const normalizedEvent: NotePlaybackEvent = {
+                        sequenceId: eventSequenceRef.current,
+                        timeSeconds: currentTime,
+                        durationSeconds:
+                          typeof event.duration === 'number'
+                            ? event.duration / 1000
+                            : undefined,
+                        midiPitches,
+                        startChar:
+                          typeof event.startChar === 'number'
+                            ? event.startChar
+                            : undefined,
+                        endChar:
+                          typeof event.endChar === 'number'
+                            ? event.endChar
+                            : undefined,
+                      };
+                      onNoteEvent(normalizedEvent);
+                    }
+                  }
                 }
               },
             }
           );
 
+          const syncTimingWithSeek = () => {
+            const controller = synthControl as unknown as {
+              seek?: (percent: number, units?: number | string) => void;
+              restart?: () => void;
+            };
+
+            const originalSeek =
+              typeof controller.seek === 'function'
+                ? controller.seek.bind(synthControl)
+                : null;
+            if (originalSeek) {
+              controller.seek = (percent: number, units?: number | string) => {
+                console.log('[TimingState] syncing seek', { percent, units });
+                timingCallbacks.setProgress(percent, units);
+                return originalSeek(percent, units);
+              };
+            }
+
+            const originalRestart =
+              typeof controller.restart === 'function'
+                ? controller.restart.bind(synthControl)
+                : null;
+            if (originalRestart) {
+              controller.restart = () => {
+                console.log('[TimingState] syncing restart');
+                timingCallbacks.setProgress(0);
+                return originalRestart();
+              };
+            }
+          };
+
+          const syncTimingWithPlayback = () => {
+            const controller = synthControl as unknown as {
+              _play?: () => Promise<unknown>;
+              pause?: () => void;
+              finished?: () => void | string;
+              isStarted?: boolean;
+              percent?: number;
+            };
+
+            const originalPlay =
+              typeof controller._play === 'function'
+                ? controller._play.bind(synthControl)
+                : null;
+            if (originalPlay) {
+              controller._play = () =>
+                originalPlay().then((result) => {
+                  const isPlaying = Boolean(controller.isStarted);
+                  console.log('[TimingState] _play resolved', { isPlaying });
+                  if (isPlaying) {
+                    const offset =
+                      typeof controller.percent === 'number'
+                        ? controller.percent
+                        : undefined;
+                    timingCallbacks.start(offset);
+                  } else {
+                    timingCallbacks.pause();
+                  }
+                  onPlayingChange?.(isPlaying);
+                  return result;
+                });
+            }
+
+            const originalPause =
+              typeof controller.pause === 'function'
+                ? controller.pause.bind(synthControl)
+                : null;
+            if (originalPause) {
+              controller.pause = () => {
+                console.log('[TimingState] pause intercepted');
+                timingCallbacks.pause();
+                onPlayingChange?.(false);
+                return originalPause();
+              };
+            }
+
+            const originalFinished =
+              typeof controller.finished === 'function'
+                ? controller.finished.bind(synthControl)
+                : null;
+            if (originalFinished) {
+              controller.finished = () => {
+                console.log('[TimingState] finished intercepted');
+                const result = originalFinished();
+                if (result === 'continue') {
+                  timingCallbacks.setProgress(0);
+                  timingCallbacks.start(0);
+                  onPlayingChange?.(true);
+                } else {
+                  timingCallbacks.stop();
+                  onPlayingChange?.(false);
+                  onCurrentTimeChange?.(0);
+                }
+                return result;
+              };
+            }
+          };
+
+          syncTimingWithSeek();
+          syncTimingWithPlayback();
+
+          const emitCharTimeMap = () => {
+            const tuneWithTimings = visualObj[0] as { noteTimings?: unknown[] };
+            const timings = tuneWithTimings?.noteTimings;
+            if (!Array.isArray(timings)) {
+              onCharTimeMapChange?.({});
+              return;
+            }
+
+            const mapping: NoteCharTimeMap = {};
+            timings.forEach((timingEvent: unknown) => {
+              const event = timingEvent as {
+                type?: string;
+                milliseconds?: number;
+                startChar?: number | null;
+                startCharArray?: Array<number | null>;
+              };
+              if (
+                event?.type !== 'event' ||
+                typeof event.milliseconds !== 'number'
+              ) {
+                return;
+              }
+
+              const timeSeconds = event.milliseconds / 1000;
+              const chars = Array.isArray(event.startCharArray)
+                ? event.startCharArray
+                : [event.startChar];
+
+              chars.forEach((char) => {
+                if (
+                  typeof char === 'number' &&
+                  Number.isFinite(char) &&
+                  mapping[char] === undefined
+                ) {
+                  mapping[char] = timeSeconds;
+                }
+              });
+            });
+
+            onCharTimeMapChange?.(mapping);
+          };
+
+          emitCharTimeMap();
+
           // Set the tune with timing callbacks
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           synthControl.setTune(visualObj[0], false, { timingCallbacks } as any);
-
-          // Start the timing callbacks when play button is clicked
-          const playButton = audioContainer.querySelector(
-            '.abcjs-midi-start'
-          ) as HTMLElement;
-          if (playButton) {
-            playButton.addEventListener('click', () => {
-              console.log('Play button clicked, starting timingCallbacks');
-              timingCallbacks.start();
-            });
-          }
 
           const resetButton = audioContainer.querySelector(
             '.abcjs-midi-reset'
@@ -103,19 +306,10 @@ export const useAbcRenderer = ({
             resetButton.addEventListener('click', () => {
               console.log('Reset button clicked, stopping timingCallbacks');
               timingCallbacks.stop();
+              timingCallbacks.setProgress(0);
               onCurrentTimeChange?.(0);
+              onPlayingChange?.(false);
             });
-          }
-
-          // Track playing state by checking the play button class
-          if (onPlayingChange) {
-            const checkPlayingState = setInterval(() => {
-              const isPlaying =
-                playButton?.classList.contains('abcjs-midi-playing') || false;
-              onPlayingChange(isPlaying);
-            }, 50);
-
-            synthControlRef.current._stateInterval = checkPlayingState;
           }
 
           synthControlRef.current = synthControl;
@@ -126,14 +320,12 @@ export const useAbcRenderer = ({
       }
     } catch (error) {
       console.error('Error rendering ABC notation:', error);
+      onCharTimeMapChange?.({});
     }
 
     return () => {
       // Clean up synth controller on unmount
       if (synthControlRef.current) {
-        if (synthControlRef.current._stateInterval) {
-          clearInterval(synthControlRef.current._stateInterval);
-        }
         if (synthControlRef.current._timingCallbacks) {
           synthControlRef.current._timingCallbacks.stop();
         }
@@ -147,5 +339,7 @@ export const useAbcRenderer = ({
     audioContainerId,
     onCurrentTimeChange,
     onPlayingChange,
+    onNoteEvent,
+    onCharTimeMapChange,
   ]);
 };

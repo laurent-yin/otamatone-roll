@@ -10,6 +10,7 @@ import 'dockview-core/dist/styles/dockview.css';
 import { AbcEditor } from './AbcEditor';
 import { AbcNotationViewer } from './AbcNotationViewer';
 import { PianoRoll } from './PianoRoll';
+import { NoteCharTimeMap, NotePlaybackEvent } from '../types/music';
 
 interface DockviewLayoutProps {
   notation: string;
@@ -18,6 +19,10 @@ interface DockviewLayoutProps {
   isPlaying: boolean;
   onCurrentTimeChange: (time: number) => void;
   onPlayingChange: (playing: boolean) => void;
+  onNoteEvent?: (event: NotePlaybackEvent) => void;
+  activeNoteEvent?: NotePlaybackEvent | null;
+  noteCharTimes?: NoteCharTimeMap;
+  onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
 }
 
 const EditorPanel = (
@@ -36,11 +41,15 @@ const PreviewPanel = (
     notation: string;
     onCurrentTimeChange: (time: number) => void;
     onPlayingChange: (playing: boolean) => void;
+    onNoteEvent?: (event: NotePlaybackEvent) => void;
+    onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
   }>
 ) => {
   const notation = props.params?.notation || '';
   const onCurrentTimeChange = props.params?.onCurrentTimeChange;
   const onPlayingChange = props.params?.onPlayingChange;
+  const onNoteEvent = props.params?.onNoteEvent;
+  const onCharTimeMapChange = props.params?.onCharTimeMapChange;
   const containerId = props.api?.id
     ? `abc-preview-${props.api.id}`
     : 'abc-preview-default';
@@ -52,6 +61,8 @@ const PreviewPanel = (
         containerId={containerId}
         onCurrentTimeChange={onCurrentTimeChange}
         onPlayingChange={onPlayingChange}
+        onNoteEvent={onNoteEvent}
+        onCharTimeMapChange={onCharTimeMapChange}
       />
     </div>
   );
@@ -62,11 +73,15 @@ const PianoRollPanel = (
     notation: string;
     currentTime: number;
     isPlaying: boolean;
+    activeNoteEvent?: NotePlaybackEvent | null;
+    noteCharTimes?: NoteCharTimeMap;
   }>
 ) => {
   const notation = props.params?.notation || '';
   const currentTime = props.params?.currentTime || 0;
   const isPlaying = props.params?.isPlaying || false;
+  const activeNoteEvent = props.params?.activeNoteEvent;
+  const noteCharTimes = props.params?.noteCharTimes;
 
   return (
     <div className="piano-roll-panel">
@@ -74,6 +89,8 @@ const PianoRollPanel = (
         notation={notation}
         currentTime={currentTime}
         isPlaying={isPlaying}
+        activeNoteEvent={activeNoteEvent}
+        noteCharTimes={noteCharTimes}
       />
     </div>
   );
@@ -86,6 +103,10 @@ export const DockviewLayout = ({
   isPlaying,
   onCurrentTimeChange,
   onPlayingChange,
+  onNoteEvent,
+  activeNoteEvent,
+  noteCharTimes,
+  onCharTimeMapChange,
 }: DockviewLayoutProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dockview, setDockview] = useState<DockviewApi | null>(null);
@@ -165,6 +186,8 @@ export const DockviewLayout = ({
         notation,
         onCurrentTimeChange,
         onPlayingChange,
+        onNoteEvent,
+        onCharTimeMapChange,
       },
       initialWidth: 700,
     });
@@ -196,6 +219,8 @@ export const DockviewLayout = ({
         notation,
         currentTime,
         isPlaying,
+        activeNoteEvent,
+        noteCharTimes,
       },
       initialWidth: 500,
     });
@@ -237,6 +262,8 @@ export const DockviewLayout = ({
         notation,
         onCurrentTimeChange,
         onPlayingChange,
+        onNoteEvent,
+        onCharTimeMapChange,
       });
     }
 
@@ -245,6 +272,8 @@ export const DockviewLayout = ({
         notation,
         currentTime,
         isPlaying,
+        activeNoteEvent,
+        noteCharTimes,
       });
     }
   }, [
@@ -255,6 +284,10 @@ export const DockviewLayout = ({
     isPlaying,
     onCurrentTimeChange,
     onPlayingChange,
+    onNoteEvent,
+    activeNoteEvent,
+    noteCharTimes,
+    onCharTimeMapChange,
   ]);
 
   return <div ref={containerRef} className="dockview-container" />;

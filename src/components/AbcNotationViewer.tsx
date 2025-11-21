@@ -1,4 +1,6 @@
 import { useAbcRenderer } from '../hooks/useAbcRenderer';
+import { NotePlaybackEvent } from '../types/music';
+import { NoteCharTimeMap } from '../types/music';
 
 interface AbcNotationViewerProps {
   notation: string;
@@ -6,6 +8,8 @@ interface AbcNotationViewerProps {
   showAudioControls?: boolean;
   onCurrentTimeChange?: (time: number) => void;
   onPlayingChange?: (playing: boolean) => void;
+  onNoteEvent?: (event: NotePlaybackEvent) => void;
+  onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
 }
 
 export const AbcNotationViewer = ({
@@ -14,6 +18,8 @@ export const AbcNotationViewer = ({
   showAudioControls = true,
   onCurrentTimeChange,
   onPlayingChange,
+  onNoteEvent,
+  onCharTimeMapChange,
 }: AbcNotationViewerProps) => {
   const audioContainerId = showAudioControls
     ? `${containerId}-audio`
@@ -25,6 +31,8 @@ export const AbcNotationViewer = ({
     audioContainerId,
     onCurrentTimeChange,
     onPlayingChange,
+    onNoteEvent,
+    onCharTimeMapChange,
   });
 
   return (
