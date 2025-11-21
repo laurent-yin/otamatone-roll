@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { DockviewLayout } from './components/DockviewLayout';
 import { DEFAULT_ABC_NOTATION } from './constants/abc-notation';
-import { NoteCharTimeMap, NotePlaybackEvent } from './types/music';
+import {
+  NoteCharTimeMap,
+  NotePlaybackEvent,
+  NoteTimeline,
+} from './types/music';
 
 const App = () => {
   const [notation, setNotation] = useState(DEFAULT_ABC_NOTATION);
@@ -10,6 +14,7 @@ const App = () => {
   const [activeNoteEvent, setActiveNoteEvent] =
     useState<NotePlaybackEvent | null>(null);
   const [noteCharTimes, setNoteCharTimes] = useState<NoteCharTimeMap>({});
+  const [noteTimeline, setNoteTimeline] = useState<NoteTimeline | null>(null);
 
   return (
     <div className="app">
@@ -29,6 +34,8 @@ const App = () => {
           activeNoteEvent={activeNoteEvent}
           noteCharTimes={noteCharTimes}
           onCharTimeMapChange={setNoteCharTimes}
+          noteTimeline={noteTimeline}
+          onNoteTimelineChange={setNoteTimeline}
         />
       </main>
     </div>

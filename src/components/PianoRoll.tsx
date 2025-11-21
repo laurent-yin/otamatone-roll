@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { usePianoRollNotes } from '../hooks/usePianoRollNotes';
-import { NoteCharTimeMap, NotePlaybackEvent } from '../types/music';
+import {
+  NoteCharTimeMap,
+  NotePlaybackEvent,
+  NoteTimeline,
+} from '../types/music';
 
 interface PianoRollProps {
   notation: string;
@@ -8,6 +12,7 @@ interface PianoRollProps {
   isPlaying?: boolean;
   activeNoteEvent?: NotePlaybackEvent | null;
   noteCharTimes?: NoteCharTimeMap;
+  noteTimeline?: NoteTimeline | null;
 }
 
 const PIXELS_PER_SECOND = 100; // Scroll speed
@@ -22,10 +27,11 @@ export const PianoRoll: React.FC<PianoRollProps> = ({
   isPlaying = false,
   activeNoteEvent = null,
   noteCharTimes,
+  noteTimeline,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
-  const { notes, totalDuration } = usePianoRollNotes(notation);
+  const { notes, totalDuration } = usePianoRollNotes(notation, noteTimeline);
   const syncedTimeRef = useRef(currentTime);
   const syncedTimestampRef = useRef(
     typeof performance !== 'undefined' ? performance.now() : Date.now()

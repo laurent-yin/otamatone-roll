@@ -1,6 +1,11 @@
 import { useEffect, useRef } from 'react';
 import abcjs from 'abcjs';
-import { NoteCharTimeMap, NotePlaybackEvent } from '../types/music';
+import { NoteCharTimeMap, NotePlaybackEvent, NoteTimeline } from '../types/music';
+import {
+  buildTimingDerivedData,
+  TimingEvent,
+  VisualObjWithTimings,
+} from '../utils/abcTiming';
 
 interface UseAbcRendererProps {
   notation: string;
@@ -10,7 +15,17 @@ interface UseAbcRendererProps {
   onPlayingChange?: (isPlaying: boolean) => void;
   onNoteEvent?: (event: NotePlaybackEvent) => void;
   onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
+  onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
 }
+
+type TimingCallbacksWithEvents = {
+  noteTimings?: TimingEvent[];
+};
+
+type VisualObjWithAudioSupport = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  setUpAudio?: (options?: Record<string, any>) => unknown;
+};
 
 export const useAbcRenderer = ({
   notation,
@@ -20,6 +35,7 @@ export const useAbcRenderer = ({
   onPlayingChange,
   onNoteEvent,
   onCharTimeMapChange,
+  onNoteTimelineChange,
 }: UseAbcRendererProps) => {
   const previousNotation = useRef<string>('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -34,20 +50,25 @@ export const useAbcRenderer = ({
 
     eventSequenceRef.current = 0;
 
+    const resetDerivedData = () => {
+      onCharTimeMapChange?.({});
+      onNoteTimelineChange?.(null);
+    };
+
     const container = document.getElementById(containerId);
     if (!container) {
       console.error(`Container with id "${containerId}" not found`);
-      onCharTimeMapChange?.({});
+      resetDerivedData();
       return;
     }
 
     if (!notation || notation.trim() === '') {
       console.warn('Empty notation provided');
-      onCharTimeMapChange?.({});
+      resetDerivedData();
       return;
     }
 
-    onCharTimeMapChange?.({});
+    resetDerivedData();
 
     try {
       const visualObj = abcjs.renderAbc(containerId, notation, {
@@ -58,6 +79,15 @@ export const useAbcRenderer = ({
 
       // Set up audio playback if audioContainerId is provided
       if (audioContainerId && visualObj && visualObj[0]) {
+        const visualObjWithAudio = visualObj[0] as VisualObjWithAudioSupport;
+        if (typeof visualObjWithAudio.setUpAudio === 'function') {
+          try {
+            visualObjWithAudio.setUpAudio();
+          } catch (audioPrepError) {
+            console.warn('abcjs setUpAudio failed; timing data may be incomplete', audioPrepError);
+          }
+        }
+
         const audioContainer = document.getElementById(audioContainerId);
         if (audioContainer) {
           // Clean up previous synth controller
@@ -251,49 +281,30 @@ export const useAbcRenderer = ({
           syncTimingWithSeek();
           syncTimingWithPlayback();
 
-          const emitCharTimeMap = () => {
-            const tuneWithTimings = visualObj[0] as { noteTimings?: unknown[] };
-            const timings = tuneWithTimings?.noteTimings;
-            if (!Array.isArray(timings)) {
-              onCharTimeMapChange?.({});
+          const emitTimingDerivedData = () => {
+            const tuneWithTimings = visualObj[0] as VisualObjWithTimings;
+            const callbacksWithEvents =
+              timingCallbacks as TimingCallbacksWithEvents;
+            const timings = callbacksWithEvents.noteTimings;
+            if (!Array.isArray(timings) || timings.length === 0) {
+              resetDerivedData();
               return;
             }
 
-            const mapping: NoteCharTimeMap = {};
-            timings.forEach((timingEvent: unknown) => {
-              const event = timingEvent as {
-                type?: string;
-                milliseconds?: number;
-                startChar?: number | null;
-                startCharArray?: Array<number | null>;
-              };
-              if (
-                event?.type !== 'event' ||
-                typeof event.milliseconds !== 'number'
-              ) {
-                return;
-              }
-
-              const timeSeconds = event.milliseconds / 1000;
-              const chars = Array.isArray(event.startCharArray)
-                ? event.startCharArray
-                : [event.startChar];
-
-              chars.forEach((char) => {
-                if (
-                  typeof char === 'number' &&
-                  Number.isFinite(char) &&
-                  mapping[char] === undefined
-                ) {
-                  mapping[char] = timeSeconds;
-                }
-              });
+            const derived = buildTimingDerivedData(
+              tuneWithTimings,
+              timings as TimingEvent[]
+            );
+            console.log('[TimingDerived] timeline stats', {
+              events: timings.length,
+              notes: derived.timeline.notes.length,
+              totalDuration: derived.timeline.totalDuration,
             });
-
-            onCharTimeMapChange?.(mapping);
+            onCharTimeMapChange?.(derived.charMap);
+            onNoteTimelineChange?.(derived.timeline);
           };
 
-          emitCharTimeMap();
+          emitTimingDerivedData();
 
           // Set the tune with timing callbacks
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -341,5 +352,6 @@ export const useAbcRenderer = ({
     onPlayingChange,
     onNoteEvent,
     onCharTimeMapChange,
+    onNoteTimelineChange,
   ]);
 };

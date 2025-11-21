@@ -13,6 +13,11 @@ export interface Note {
   source?: NoteSourceMeta;
 }
 
+export interface NoteTimeline {
+  notes: Note[];
+  totalDuration: number;
+}
+
 export interface NotePlaybackEvent {
   sequenceId: number;
   timeSeconds: number;

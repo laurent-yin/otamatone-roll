@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import abcjs from 'abcjs';
-import { Note } from '../types/music';
+import { Note, NoteTimeline } from '../types/music';
 
 interface AbcPitch {
   pitch: number;
@@ -49,8 +49,15 @@ const getTempoDetails = (tune: AbcjsTuneLike) => {
   return { secondsPerWholeNote };
 };
 
-export const usePianoRollNotes = (notation: string) => {
+export const usePianoRollNotes = (
+  notation: string,
+  override?: NoteTimeline | null
+) => {
   const result = useMemo(() => {
+    if (override) {
+      return override;
+    }
+
     if (!notation || notation.trim() === '') {
       return { notes: [], totalDuration: 0 };
     }
@@ -166,9 +173,9 @@ export const usePianoRollNotes = (notation: string) => {
       console.error('Error extracting notes:', error);
       return { notes: [], totalDuration: 0 };
     }
-  }, [notation]);
+  }, [notation, override]);
 
-  return result;
+  return override ?? result;
 };
 
 const BASE_MIDI_FOR_C = 60; // Treat pitch 0 ("C") as middle C.
