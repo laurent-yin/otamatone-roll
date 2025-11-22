@@ -95,7 +95,7 @@ describe('buildTimingDerivedData', () => {
 });
 
 describe('abcjs integration', () => {
-  it('extracts Bb scale note data for piano roll rendering', () => {
+  it('extracts Bb scale note data for otamatone roll rendering', () => {
     const containerId = 'abc-sample';
     document.body.innerHTML = `<div id="${containerId}"></div>`;
 

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { usePianoRollNotes } from '../hooks/usePianoRollNotes';
+import { useOtamatoneRollNotes } from '../hooks/useOtamatoneRollNotes';
 import {
   NoteCharTimeMap,
   NotePlaybackEvent,
   NoteTimeline,
 } from '../types/music';
 
-interface PianoRollProps {
+interface OtamatoneRollProps {
   notation: string;
   currentTime?: number;
   isPlaying?: boolean;
@@ -15,13 +15,13 @@ interface PianoRollProps {
   noteTimeline?: NoteTimeline | null;
 }
 
-const PIXELS_PER_SECOND = 100; // Scroll speed
-const NOTE_HEIGHT = 6; // Height of each note rectangle
-const PITCH_PADDING = 1; // Vertical padding between notes
-const MIN_PITCH = 24; // C1 - very low
-const MAX_PITCH = 108; // C8 - very high
+const PIXELS_PER_SECOND = 100;
+const NOTE_HEIGHT = 6;
+const PITCH_PADDING = 1;
+const MIN_PITCH = 24;
+const MAX_PITCH = 108;
 
-export const PianoRoll: React.FC<PianoRollProps> = ({
+export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
   notation,
   currentTime = 0,
   isPlaying = false,
@@ -31,7 +31,10 @@ export const PianoRoll: React.FC<PianoRollProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
-  const { notes, totalDuration } = usePianoRollNotes(notation, noteTimeline);
+  const { notes, totalDuration } = useOtamatoneRollNotes(
+    notation,
+    noteTimeline
+  );
   const syncedTimeRef = useRef(currentTime);
   const syncedTimestampRef = useRef(
     typeof performance !== 'undefined' ? performance.now() : Date.now()
@@ -227,19 +230,16 @@ export const PianoRoll: React.FC<PianoRollProps> = ({
     );
   }, [getDisplayTime, notes, noteStartTimes, renderedTotalDuration]);
 
-  // Handle canvas resizing and rendering together
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Re-render when window resizes
     const resizeObserver = new ResizeObserver(() => {
       renderFrame();
     });
 
     resizeObserver.observe(canvas);
 
-    // Animation loop for playback
     const animate = () => {
       if (isPlayingRef.current) {
         renderFrame();
@@ -247,7 +247,6 @@ export const PianoRoll: React.FC<PianoRollProps> = ({
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
-    // Initial render
     renderFrame();
     animate();
 
@@ -306,5 +305,5 @@ export const PianoRoll: React.FC<PianoRollProps> = ({
     latestEventIdRef.current = 0;
   }, [notes]);
 
-  return <canvas ref={canvasRef} className="piano-roll-canvas" />;
+  return <canvas ref={canvasRef} className="otamatone-roll-canvas" />;
 };

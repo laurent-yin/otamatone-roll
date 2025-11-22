@@ -9,7 +9,7 @@ import {
 import 'dockview-core/dist/styles/dockview.css';
 import { AbcEditor } from './AbcEditor';
 import { AbcNotationViewer } from './AbcNotationViewer';
-import { PianoRoll } from './PianoRoll';
+import { OtamatoneRoll } from './OtamatoneRoll';
 import {
   NoteCharTimeMap,
   NotePlaybackEvent,
@@ -77,7 +77,7 @@ const PreviewPanel = (
   );
 };
 
-const PianoRollPanel = (
+const OtamatoneRollPanel = (
   props: IDockviewPanelProps<{
     notation: string;
     currentTime: number;
@@ -95,8 +95,8 @@ const PianoRollPanel = (
   const noteTimeline = props.params?.noteTimeline;
 
   return (
-    <div className="piano-roll-panel">
-      <PianoRoll
+    <div className="otamatone-roll-panel">
+      <OtamatoneRoll
         notation={notation}
         currentTime={currentTime}
         isPlaying={isPlaying}
@@ -155,7 +155,7 @@ export const DockviewLayout = ({
     const components = {
       editor: EditorPanel,
       preview: PreviewPanel,
-      pianoRoll: PianoRollPanel,
+      otamatoneRoll: OtamatoneRollPanel,
     };
 
     const dockviewInstance = new DockviewComponent(containerRef.current, {
@@ -224,11 +224,11 @@ export const DockviewLayout = ({
     });
     editorPanelRef.current = editorPanel;
 
-    // Create piano roll panel
+    // Create otamatone roll panel
     dockviewInstance.addPanel({
-      id: 'piano-roll-panel',
-      component: 'pianoRoll',
-      title: 'Piano Roll',
+      id: 'otamatone-roll-panel',
+      component: 'otamatoneRoll',
+      title: 'Otamatone Roll',
       position: { referencePanel: 'preview-panel', direction: 'below' },
       params: {
         notation,
@@ -264,7 +264,7 @@ export const DockviewLayout = ({
 
     const editorPanel = dockview.getPanel('editor-panel');
     const previewPanel = dockview.getPanel('preview-panel');
-    const pianoRollPanel = dockview.getPanel('piano-roll-panel');
+    const otamatoneRollPanel = dockview.getPanel('otamatone-roll-panel');
 
     if (editorPanel) {
       editorPanel.api.updateParameters({
@@ -284,8 +284,8 @@ export const DockviewLayout = ({
       });
     }
 
-    if (pianoRollPanel) {
-      pianoRollPanel.api.updateParameters({
+    if (otamatoneRollPanel) {
+      otamatoneRollPanel.api.updateParameters({
         notation,
         currentTime,
         isPlaying,

@@ -49,7 +49,7 @@ const getTempoDetails = (tune: AbcjsTuneLike) => {
   return { secondsPerWholeNote };
 };
 
-export const usePianoRollNotes = (
+export const useOtamatoneRollNotes = (
   notation: string,
   override?: NoteTimeline | null
 ) => {
