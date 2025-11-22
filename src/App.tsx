@@ -7,6 +7,8 @@ import {
   NoteTimeline,
 } from './types/music';
 
+const AUDIO_CONTROLS_ID = 'abc-global-audio-controls';
+
 const App = () => {
   const [notation, setNotation] = useState(DEFAULT_ABC_NOTATION);
   const [currentTime, setCurrentTime] = useState(0);
@@ -19,13 +21,21 @@ const App = () => {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Otamatone Roll</h1>
-        <p>ABC Notation Editor & Renderer</p>
+        <div className="app-header-title">
+          <h1>Otamatone Roll</h1>
+          <p>ABC Notation Editor & Renderer</p>
+        </div>
+        <div
+          id={AUDIO_CONTROLS_ID}
+          className="abc-audio-controls app-header-audio-controls"
+          aria-label="Audio playback controls"
+        />
       </header>
       <main className="app-main">
         <DockviewLayout
           notation={notation}
           onNotationChange={setNotation}
+          audioContainerId={AUDIO_CONTROLS_ID}
           currentTime={currentTime}
           isPlaying={isPlaying}
           onCurrentTimeChange={setCurrentTime}

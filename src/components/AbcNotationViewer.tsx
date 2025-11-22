@@ -8,6 +8,7 @@ import {
 interface AbcNotationViewerProps {
   notation: string;
   containerId?: string;
+  audioContainerId?: string;
   showAudioControls?: boolean;
   onCurrentTimeChange?: (time: number) => void;
   onPlayingChange?: (playing: boolean) => void;
@@ -19,6 +20,7 @@ interface AbcNotationViewerProps {
 export const AbcNotationViewer = ({
   notation,
   containerId = 'abc-notation-container',
+  audioContainerId,
   showAudioControls = true,
   onCurrentTimeChange,
   onPlayingChange,
@@ -26,14 +28,13 @@ export const AbcNotationViewer = ({
   onCharTimeMapChange,
   onNoteTimelineChange,
 }: AbcNotationViewerProps) => {
-  const audioContainerId = showAudioControls
-    ? `${containerId}-audio`
-    : undefined;
+  const resolvedAudioContainerId =
+    audioContainerId || (showAudioControls ? `${containerId}-audio` : undefined);
 
   useAbcRenderer({
     notation,
     containerId,
-    audioContainerId,
+    audioContainerId: resolvedAudioContainerId,
     onCurrentTimeChange,
     onPlayingChange,
     onNoteEvent,
@@ -43,9 +44,9 @@ export const AbcNotationViewer = ({
 
   return (
     <div className="abc-notation-viewer">
-      {showAudioControls && (
+      {showAudioControls && !audioContainerId && (
         <div
-          id={audioContainerId}
+          id={resolvedAudioContainerId}
           className="abc-audio-controls"
           aria-label="Audio playback controls"
         />

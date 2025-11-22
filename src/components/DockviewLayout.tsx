@@ -21,6 +21,7 @@ interface DockviewLayoutProps {
   onNotationChange: (notation: string) => void;
   currentTime: number;
   isPlaying: boolean;
+  audioContainerId?: string;
   onCurrentTimeChange: (time: number) => void;
   onPlayingChange: (playing: boolean) => void;
   onNoteEvent?: (event: NotePlaybackEvent) => void;
@@ -45,6 +46,7 @@ const EditorPanel = (
 const PreviewPanel = (
   props: IDockviewPanelProps<{
     notation: string;
+    audioContainerId?: string;
     onCurrentTimeChange: (time: number) => void;
     onPlayingChange: (playing: boolean) => void;
     onNoteEvent?: (event: NotePlaybackEvent) => void;
@@ -58,6 +60,7 @@ const PreviewPanel = (
   const onNoteEvent = props.params?.onNoteEvent;
   const onCharTimeMapChange = props.params?.onCharTimeMapChange;
   const onNoteTimelineChange = props.params?.onNoteTimelineChange;
+  const audioContainerId = props.params?.audioContainerId;
   const containerId = props.api?.id
     ? `abc-preview-${props.api.id}`
     : 'abc-preview-default';
@@ -67,6 +70,7 @@ const PreviewPanel = (
       <AbcNotationViewer
         notation={notation}
         containerId={containerId}
+        audioContainerId={audioContainerId}
         onCurrentTimeChange={onCurrentTimeChange}
         onPlayingChange={onPlayingChange}
         onNoteEvent={onNoteEvent}
@@ -113,6 +117,7 @@ export const DockviewLayout = ({
   onNotationChange,
   currentTime,
   isPlaying,
+  audioContainerId,
   onCurrentTimeChange,
   onPlayingChange,
   onNoteEvent,
@@ -203,6 +208,7 @@ export const DockviewLayout = ({
         onNoteEvent,
         onCharTimeMapChange,
         onNoteTimelineChange,
+        audioContainerId,
       },
       initialWidth: 700,
     });
@@ -281,6 +287,7 @@ export const DockviewLayout = ({
         onNoteEvent,
         onCharTimeMapChange,
         onNoteTimelineChange,
+        audioContainerId,
       });
     }
 
@@ -308,6 +315,7 @@ export const DockviewLayout = ({
     onCharTimeMapChange,
     noteTimeline,
     onNoteTimelineChange,
+    audioContainerId,
   ]);
 
   return <div ref={containerRef} className="dockview-container" />;
