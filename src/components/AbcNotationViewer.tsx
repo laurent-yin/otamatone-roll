@@ -29,7 +29,8 @@ export const AbcNotationViewer = ({
   onNoteTimelineChange,
 }: AbcNotationViewerProps) => {
   const resolvedAudioContainerId =
-    audioContainerId || (showAudioControls ? `${containerId}-audio` : undefined);
+    audioContainerId ||
+    (showAudioControls ? `${containerId}-audio` : undefined);
 
   useAbcRenderer({
     notation,
