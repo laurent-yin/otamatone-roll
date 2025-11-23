@@ -304,15 +304,17 @@ export const DockviewLayout = ({
       }
       try {
         dockviewInstance.api.fromJSON(storedLayout);
-        const restoredEditorPanel =
-          dockviewInstance.getPanel('editor-panel') as unknown as
-            | IDockviewPanel
-            | undefined;
+        const restoredEditorPanel = dockviewInstance.getPanel(
+          'editor-panel'
+        ) as unknown as IDockviewPanel | undefined;
         editorPanelRef.current = restoredEditorPanel ?? null;
         requestAnimationFrame(enforceEditorWidth);
         return true;
       } catch (error) {
-        console.warn('Failed to restore dockview layout, falling back to default', error);
+        console.warn(
+          'Failed to restore dockview layout, falling back to default',
+          error
+        );
         return false;
       }
     };
