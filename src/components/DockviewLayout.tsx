@@ -175,31 +175,26 @@ export const DockviewLayout = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [dockview, setDockview] = useState<DockviewApi | null>(null);
   const editorPanelRef = useRef<IDockviewPanel | null>(null);
+  const previewPanelRef = useRef<IDockviewPanel | null>(null);
+  const otamatonePanelRef = useRef<IDockviewPanel | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const layoutChangeDisposableRef = useRef<{ dispose: () => void } | null>(
     null
   );
 
-  const enforceEditorWidth = () => {
-    if (!containerRef.current || !editorPanelRef.current) {
+  const enforcePanelWidths = () => {
+    if (!containerRef.current) {
       return;
     }
 
     const containerWidth = containerRef.current.clientWidth;
-    const TARGET_WIDTH = 260;
-    const MIN_WIDTH = 180;
-    const MIN_RIGHT_SPACE = 420;
+    const editorWidth = containerWidth * 0.2;
+    const previewWidth = containerWidth * 0.2;
+    const otamatoneWidth = containerWidth * 0.6;
 
-    const availableForEditor = containerWidth - MIN_RIGHT_SPACE;
-    const width = Math.max(
-      MIN_WIDTH,
-      Math.min(
-        TARGET_WIDTH,
-        availableForEditor > 0 ? availableForEditor : TARGET_WIDTH
-      )
-    );
-
-    editorPanelRef.current.group.api.setSize({ width });
+    editorPanelRef.current?.group.api.setSize({ width: editorWidth });
+    previewPanelRef.current?.group.api.setSize({ width: previewWidth });
+    otamatonePanelRef.current?.group.api.setSize({ width: otamatoneWidth });
   };
 
   useEffect(() => {
@@ -244,10 +239,26 @@ export const DockviewLayout = ({
 
     setDockview(dockviewInstance.api);
     const initializeDefaultLayout = () => {
-      dockviewInstance.addPanel({
+      const editorPanel = dockviewInstance.addPanel({
+        id: 'editor-panel',
+        component: 'editor',
+        title: 'Editor',
+        params: {
+          notation,
+          onChange: onNotationChange,
+        },
+        initialWidth: 280,
+      });
+      editorPanelRef.current = editorPanel;
+
+      const previewPanel = dockviewInstance.addPanel({
         id: 'preview-panel',
         component: 'preview',
         title: 'Preview',
+        position: {
+          referencePanel: 'editor-panel',
+          direction: 'right',
+        },
         params: {
           notation,
           onCurrentTimeChange,
@@ -257,30 +268,15 @@ export const DockviewLayout = ({
           onNoteTimelineChange,
           audioContainerId,
         },
-        initialWidth: 700,
+        initialWidth: 520,
       });
+      previewPanelRef.current = previewPanel;
 
-      const editorPanel = dockviewInstance.addPanel({
-        id: 'editor-panel',
-        component: 'editor',
-        title: 'Editor',
-        position: {
-          referencePanel: 'preview-panel',
-          direction: 'left',
-        },
-        params: {
-          notation,
-          onChange: onNotationChange,
-        },
-        initialWidth: 280,
-      });
-      editorPanelRef.current = editorPanel;
-
-      dockviewInstance.addPanel({
+      const otamatonePanel = dockviewInstance.addPanel({
         id: 'otamatone-roll-panel',
         component: 'otamatoneRoll',
         title: 'Otamatone Roll',
-        position: { referencePanel: 'preview-panel', direction: 'below' },
+        position: { referencePanel: 'preview-panel', direction: 'right' },
         params: {
           notation,
           currentTime,
@@ -291,10 +287,11 @@ export const DockviewLayout = ({
           lowestNoteHz,
           highestNoteHz,
         },
-        initialWidth: 500,
+        initialWidth: 520,
       });
+      otamatonePanelRef.current = otamatonePanel;
 
-      requestAnimationFrame(enforceEditorWidth);
+      requestAnimationFrame(enforcePanelWidths);
     };
 
     const restoreLayoutIfPossible = () => {
@@ -307,8 +304,18 @@ export const DockviewLayout = ({
         const restoredEditorPanel = dockviewInstance.getPanel(
           'editor-panel'
         ) as unknown as IDockviewPanel | undefined;
+        const restoredPreviewPanel = dockviewInstance.getPanel(
+          'preview-panel'
+        ) as unknown as IDockviewPanel | undefined;
+        const restoredOtamatonePanel = dockviewInstance.getPanel(
+          'otamatone-roll-panel'
+        ) as unknown as IDockviewPanel | undefined;
+
         editorPanelRef.current = restoredEditorPanel ?? null;
-        requestAnimationFrame(enforceEditorWidth);
+        previewPanelRef.current = restoredPreviewPanel ?? null;
+        otamatonePanelRef.current = restoredOtamatonePanel ?? null;
+
+        requestAnimationFrame(enforcePanelWidths);
         return true;
       } catch (error) {
         console.warn(
@@ -332,7 +339,7 @@ export const DockviewLayout = ({
     persistLayout(dockviewInstance.api);
 
     const resizeObserver = new ResizeObserver(() => {
-      enforceEditorWidth();
+      enforcePanelWidths();
     });
     resizeObserver.observe(containerRef.current);
     resizeObserverRef.current = resizeObserver;
@@ -344,6 +351,8 @@ export const DockviewLayout = ({
       resizeObserverRef.current = null;
       dockviewInstance.dispose();
       editorPanelRef.current = null;
+      previewPanelRef.current = null;
+      otamatonePanelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount

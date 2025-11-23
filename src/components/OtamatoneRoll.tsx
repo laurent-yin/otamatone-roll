@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useOtamatoneRollNotes } from '../hooks/useOtamatoneRollNotes';
+import {
+  useOtamatoneRollNotes,
+  DEFAULT_SECONDS_PER_BEAT,
+} from '../hooks/useOtamatoneRollNotes';
 import {
   NoteCharTimeMap,
   NotePlaybackEvent,
@@ -25,8 +28,6 @@ interface OtamatoneRollProps {
   highestNoteHz?: number;
 }
 
-const PIXELS_PER_SECOND = 100;
-const NOTE_HEIGHT = 6;
 const PLAYHEAD_VERTICAL_INSET = 12;
 const PLAYABLE_EDGE_RATIO = 0.03;
 
@@ -41,6 +42,9 @@ const BASE_PLAYHEAD_RADIUS = 14;
 const NOTE_LABEL_MARGIN = 14;
 const NOTE_LABEL_GAP = 12;
 const MIN_PLAYHEAD_FRACTION = 0.12;
+const BEATS_PER_VERTICAL_SPAN = 4;
+const FALLBACK_PIXELS_PER_SECOND = 100;
+const NOTE_THICKNESS_RATIO = 0.7; // portion of inner width used for note thickness
 
 const getTimestamp = () =>
   typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -99,10 +103,14 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
-  const { notes, totalDuration } = useOtamatoneRollNotes(
+  const { notes, totalDuration, secondsPerBeat } = useOtamatoneRollNotes(
     notation,
     noteTimeline
   );
+  const effectiveSecondsPerBeat =
+    typeof secondsPerBeat === 'number' && secondsPerBeat > 0
+      ? secondsPerBeat
+      : DEFAULT_SECONDS_PER_BEAT;
   const syncedTimeRef = useRef(currentTime);
   const syncedTimestampRef = useRef<number>(0);
   const isPlayingRef = useRef(isPlaying);
@@ -290,6 +298,17 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     const playableTop = innerY + innerHeight * PLAYABLE_EDGE_RATIO;
     const playableBottom = innerY + innerHeight * (1 - PLAYABLE_EDGE_RATIO);
     const playableHeight = Math.max(1, playableBottom - playableTop);
+    const pixelsPerBeat =
+      innerHeight > 0 && BEATS_PER_VERTICAL_SPAN > 0
+        ? innerHeight / BEATS_PER_VERTICAL_SPAN
+        : null;
+    const pixelsPerSecond = pixelsPerBeat
+      ? pixelsPerBeat / effectiveSecondsPerBeat
+      : FALLBACK_PIXELS_PER_SECOND;
+    const noteHeight = Math.min(
+      Math.max(2, innerWidth * NOTE_THICKNESS_RATIO),
+      playableHeight
+    );
 
     const pitchRange = maxPitch - minPitch;
 
@@ -354,8 +373,8 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     notes.forEach((note, index) => {
       const adjustedStart = noteStartTimes[index] ?? note.startTime;
       const timeDiff = adjustedStart - effectiveTime;
-      const x = playheadX + timeDiff * PIXELS_PER_SECOND;
-      const noteWidth = note.duration * PIXELS_PER_SECOND;
+      const x = playheadX + timeDiff * pixelsPerSecond;
+      const noteWidth = note.duration * pixelsPerSecond;
       const noteRight = x + noteWidth;
       const noteFrequency = midiToFrequency(note.pitch);
       const normalized = stemPosition(
@@ -365,8 +384,8 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
       );
       const centerY = playableTop + normalized * playableHeight;
       const y = Math.min(
-        Math.max(centerY - NOTE_HEIGHT / 2, playableTop),
-        Math.min(playableBottom - NOTE_HEIGHT / 2, height - NOTE_HEIGHT)
+        Math.max(centerY - noteHeight / 2, playableTop),
+        Math.min(playableBottom - noteHeight / 2, height - noteHeight)
       );
 
       if (noteRight < innerX || x > width) {
@@ -398,11 +417,13 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
       }
 
       ctx.fillStyle = color;
-      ctx.fillRect(drawStart, y, drawWidth, NOTE_HEIGHT);
+      ctx.beginPath();
+      drawRoundedRect(ctx, drawStart, y, drawWidth, noteHeight, noteHeight / 2);
+      ctx.fill();
 
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 1;
-      ctx.strokeRect(drawStart, y, drawWidth, NOTE_HEIGHT);
+      ctx.stroke();
     });
     ctx.restore();
   }, [
@@ -414,6 +435,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     maxPitch,
     minFrequency,
     maxFrequency,
+    effectiveSecondsPerBeat,
   ]);
 
   useEffect(() => {

@@ -28,6 +28,7 @@ interface AbcjsTuneLike {
 
 const DEFAULT_BPM = 120;
 const DEFAULT_BEAT_LENGTH = 0.25; // quarter note
+export const DEFAULT_SECONDS_PER_BEAT = 60 / DEFAULT_BPM;
 
 const getTempoDetails = (tune: AbcjsTuneLike) => {
   const tempoMeta = tune.metaText?.tempo;
@@ -42,11 +43,10 @@ const getTempoDetails = (tune: AbcjsTuneLike) => {
     (typeof beatLengthFromTune === 'number' && beatLengthFromTune > 0
       ? beatLengthFromTune
       : undefined) ?? DEFAULT_BEAT_LENGTH;
-
   const secondsPerBeat = 60 / effectiveBpm;
   const secondsPerWholeNote = secondsPerBeat / effectiveBeatLength;
 
-  return { secondsPerWholeNote };
+  return { secondsPerWholeNote, secondsPerBeat };
 };
 
 export const useOtamatoneRollNotes = (
@@ -59,7 +59,11 @@ export const useOtamatoneRollNotes = (
     }
 
     if (!notation || notation.trim() === '') {
-      return { notes: [], totalDuration: 0 };
+      return {
+        notes: [],
+        totalDuration: 0,
+        secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
+      };
     }
 
     try {
@@ -71,7 +75,9 @@ export const useOtamatoneRollNotes = (
       }
 
       const tune = tunes[0];
-      const { secondsPerWholeNote } = getTempoDetails(tune as AbcjsTuneLike);
+      const { secondsPerWholeNote, secondsPerBeat } = getTempoDetails(
+        tune as AbcjsTuneLike
+      );
       const extractedNotes: Note[] = [];
       const voiceTimes = new Map<string, number>();
       let maxTimeSeconds = 0;
@@ -168,10 +174,18 @@ export const useOtamatoneRollNotes = (
         });
       }
 
-      return { notes: extractedNotes, totalDuration: maxTimeSeconds };
+      return {
+        notes: extractedNotes,
+        totalDuration: maxTimeSeconds,
+        secondsPerBeat,
+      };
     } catch (error) {
       console.error('Error extracting notes:', error);
-      return { notes: [], totalDuration: 0 };
+      return {
+        notes: [],
+        totalDuration: 0,
+        secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
+      };
     }
   }, [notation, override]);
 
