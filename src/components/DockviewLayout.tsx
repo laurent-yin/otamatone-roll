@@ -5,6 +5,7 @@ import {
   DockviewComponent,
   IDockviewPanel,
   IDockviewPanelProps,
+  SerializedDockview,
 } from 'dockview-core';
 import 'dockview-core/dist/styles/dockview.css';
 import { AbcEditor } from './AbcEditor';
@@ -33,6 +34,40 @@ interface DockviewLayoutProps {
   lowestNoteHz?: number;
   highestNoteHz?: number;
 }
+
+const DOCKVIEW_LAYOUT_STORAGE_KEY = 'or-dockview-layout';
+const isBrowser = () => typeof window !== 'undefined' && !!window.localStorage;
+
+const readStoredLayout = (): SerializedDockview | undefined => {
+  if (!isBrowser()) {
+    return undefined;
+  }
+  try {
+    const raw = window.localStorage.getItem(DOCKVIEW_LAYOUT_STORAGE_KEY);
+    if (!raw) {
+      return undefined;
+    }
+    return JSON.parse(raw) as SerializedDockview;
+  } catch (error) {
+    console.warn('Unable to read dockview layout from localStorage', error);
+    return undefined;
+  }
+};
+
+const persistLayout = (api: DockviewApi) => {
+  if (!isBrowser()) {
+    return;
+  }
+  try {
+    const serialized = api.toJSON();
+    window.localStorage.setItem(
+      DOCKVIEW_LAYOUT_STORAGE_KEY,
+      JSON.stringify(serialized)
+    );
+  } catch (error) {
+    console.warn('Unable to persist dockview layout', error);
+  }
+};
 
 const EditorPanel = (
   props: IDockviewPanelProps<{
@@ -141,6 +176,9 @@ export const DockviewLayout = ({
   const [dockview, setDockview] = useState<DockviewApi | null>(null);
   const editorPanelRef = useRef<IDockviewPanel | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const layoutChangeDisposableRef = useRef<{ dispose: () => void } | null>(
+    null
+  );
 
   const enforceEditorWidth = () => {
     if (!containerRef.current || !editorPanelRef.current) {
@@ -205,61 +243,91 @@ export const DockviewLayout = ({
     });
 
     setDockview(dockviewInstance.api);
+    const initializeDefaultLayout = () => {
+      dockviewInstance.addPanel({
+        id: 'preview-panel',
+        component: 'preview',
+        title: 'Preview',
+        params: {
+          notation,
+          onCurrentTimeChange,
+          onPlayingChange,
+          onNoteEvent,
+          onCharTimeMapChange,
+          onNoteTimelineChange,
+          audioContainerId,
+        },
+        initialWidth: 700,
+      });
 
-    // Create preview panel (right side)
-    dockviewInstance.addPanel({
-      id: 'preview-panel',
-      component: 'preview',
-      title: 'Preview',
-      params: {
-        notation,
-        onCurrentTimeChange,
-        onPlayingChange,
-        onNoteEvent,
-        onCharTimeMapChange,
-        onNoteTimelineChange,
-        audioContainerId,
-      },
-      initialWidth: 700,
-    });
+      const editorPanel = dockviewInstance.addPanel({
+        id: 'editor-panel',
+        component: 'editor',
+        title: 'Editor',
+        position: {
+          referencePanel: 'preview-panel',
+          direction: 'left',
+        },
+        params: {
+          notation,
+          onChange: onNotationChange,
+        },
+        initialWidth: 280,
+      });
+      editorPanelRef.current = editorPanel;
 
-    // Create editor panel (left side) with explicit width
-    const editorPanel = dockviewInstance.addPanel({
-      id: 'editor-panel',
-      component: 'editor',
-      title: 'Editor',
-      position: {
-        referencePanel: 'preview-panel',
-        direction: 'left',
-      },
-      params: {
-        notation,
-        onChange: onNotationChange,
-      },
-      initialWidth: 280,
-    });
-    editorPanelRef.current = editorPanel;
+      dockviewInstance.addPanel({
+        id: 'otamatone-roll-panel',
+        component: 'otamatoneRoll',
+        title: 'Otamatone Roll',
+        position: { referencePanel: 'preview-panel', direction: 'below' },
+        params: {
+          notation,
+          currentTime,
+          isPlaying,
+          activeNoteEvent,
+          noteCharTimes,
+          noteTimeline,
+          lowestNoteHz,
+          highestNoteHz,
+        },
+        initialWidth: 500,
+      });
 
-    // Create otamatone roll panel
-    dockviewInstance.addPanel({
-      id: 'otamatone-roll-panel',
-      component: 'otamatoneRoll',
-      title: 'Otamatone Roll',
-      position: { referencePanel: 'preview-panel', direction: 'below' },
-      params: {
-        notation,
-        currentTime,
-        isPlaying,
-        activeNoteEvent,
-        noteCharTimes,
-        noteTimeline,
-        lowestNoteHz,
-        highestNoteHz,
-      },
-      initialWidth: 500,
-    });
+      requestAnimationFrame(enforceEditorWidth);
+    };
 
-    requestAnimationFrame(enforceEditorWidth);
+    const restoreLayoutIfPossible = () => {
+      const storedLayout = readStoredLayout();
+      if (!storedLayout) {
+        return false;
+      }
+      try {
+        dockviewInstance.api.fromJSON(storedLayout);
+        const restoredEditorPanel =
+          dockviewInstance.getPanel('editor-panel') as unknown as
+            | IDockviewPanel
+            | undefined;
+        editorPanelRef.current = restoredEditorPanel ?? null;
+        requestAnimationFrame(enforceEditorWidth);
+        return true;
+      } catch (error) {
+        console.warn('Failed to restore dockview layout, falling back to default', error);
+        return false;
+      }
+    };
+
+    if (!restoreLayoutIfPossible()) {
+      initializeDefaultLayout();
+    }
+
+    layoutChangeDisposableRef.current?.dispose?.();
+    layoutChangeDisposableRef.current = dockviewInstance.api.onDidLayoutChange(
+      () => {
+        persistLayout(dockviewInstance.api);
+      }
+    );
+    persistLayout(dockviewInstance.api);
 
     const resizeObserver = new ResizeObserver(() => {
       enforceEditorWidth();
@@ -268,6 +336,8 @@ export const DockviewLayout = ({
     resizeObserverRef.current = resizeObserver;
 
     return () => {
+      layoutChangeDisposableRef.current?.dispose?.();
+      layoutChangeDisposableRef.current = null;
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
       dockviewInstance.dispose();
