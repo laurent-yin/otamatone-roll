@@ -16,6 +16,9 @@ const AUDIO_CONTROLS_ID = 'abc-global-audio-controls';
 const LOWEST_NOTE_COOKIE = 'or-lowest-note-hz';
 const HIGHEST_NOTE_COOKIE = 'or-highest-note-hz';
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // one year
+const NOTATION_STORAGE_KEY = 'or-abc-notation';
+
+const isBrowser = () => typeof window !== 'undefined';
 
 const readFrequencyCookie = (cookieName: string, fallback: number) => {
   const raw = getCookie(cookieName);
@@ -31,8 +34,23 @@ const readFrequencyCookie = (cookieName: string, fallback: number) => {
   return parsed;
 };
 
+const readStoredNotation = () => {
+  if (!isBrowser()) {
+    return DEFAULT_ABC_NOTATION;
+  }
+  try {
+    const stored = window.localStorage.getItem(NOTATION_STORAGE_KEY);
+    if (stored !== null && stored.trim().length > 0) {
+      return stored;
+    }
+  } catch (error) {
+    console.warn('Unable to read notation from localStorage', error);
+  }
+  return DEFAULT_ABC_NOTATION;
+};
+
 const App = () => {
-  const [notation, setNotation] = useState(DEFAULT_ABC_NOTATION);
+  const [notation, setNotation] = useState<string>(() => readStoredNotation());
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeNoteEvent, setActiveNoteEvent] =
@@ -77,6 +95,17 @@ const App = () => {
       maxAgeSeconds: COOKIE_MAX_AGE_SECONDS,
     });
   }, [sanitizedHighestNoteHz]);
+
+  useEffect(() => {
+    if (!isBrowser()) {
+      return;
+    }
+    try {
+      window.localStorage.setItem(NOTATION_STORAGE_KEY, notation);
+    } catch (error) {
+      console.warn('Unable to persist notation to localStorage', error);
+    }
+  }, [notation]);
 
   const handleFrequencyChange = (
     event: ChangeEvent<HTMLInputElement>,
