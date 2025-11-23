@@ -27,11 +27,25 @@ interface OtamatoneRollProps {
 
 const PIXELS_PER_SECOND = 100;
 const NOTE_HEIGHT = 6;
-const PLAYHEAD_OUTER_WIDTH = 28;
-const PLAYHEAD_INNER_PADDING = 5;
 const PLAYHEAD_VERTICAL_INSET = 12;
-const PLAYHEAD_RADIUS = 14;
 const PLAYABLE_EDGE_RATIO = 0.03;
+
+const OTAMATONE_LENGTH_UNITS = 23;
+const OTAMATONE_WIDTH_UNITS = 1.5;
+const OTAMATONE_WIDTH_PER_LENGTH =
+  OTAMATONE_WIDTH_UNITS / OTAMATONE_LENGTH_UNITS;
+
+const BASE_PLAYHEAD_OUTER_WIDTH = 28;
+const BASE_PLAYHEAD_INNER_PADDING = 5;
+const BASE_PLAYHEAD_RADIUS = 14;
+const NOTE_LABEL_MARGIN = 14;
+const NOTE_LABEL_GAP = 12;
+const MIN_PLAYHEAD_FRACTION = 0.12;
+
+const getTimestamp = () =>
+  typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
 
 const clampMidiPitch = (pitch: number): number => {
   if (!Number.isFinite(pitch)) {
@@ -90,9 +104,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     noteTimeline
   );
   const syncedTimeRef = useRef(currentTime);
-  const syncedTimestampRef = useRef(
-    typeof performance !== 'undefined' ? performance.now() : Date.now()
-  );
+  const syncedTimestampRef = useRef<number>(0);
   const isPlayingRef = useRef(isPlaying);
   const activeNoteIndexRef = useRef<number | null>(null);
   const latestEventIdRef = useRef(0);
@@ -213,8 +225,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
   );
 
   const getDisplayTime = useCallback(() => {
-    const now =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const now = getTimestamp();
     if (isPlayingRef.current) {
       const elapsed = (now - syncedTimestampRef.current) / 1000;
       return syncedTimeRef.current + elapsed;
@@ -240,20 +251,41 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.scale(dpr, dpr);
 
-    const playheadX = width * 0.2;
-    const playheadOuterX = playheadX - PLAYHEAD_OUTER_WIDTH / 2;
+    const playheadOuterWidth =
+      height > 0
+        ? height * OTAMATONE_WIDTH_PER_LENGTH
+        : BASE_PLAYHEAD_OUTER_WIDTH;
+    const widthScale =
+      BASE_PLAYHEAD_OUTER_WIDTH > 0
+        ? playheadOuterWidth / BASE_PLAYHEAD_OUTER_WIDTH
+        : 1;
+    const playheadInnerPadding = Math.max(
+      1,
+      BASE_PLAYHEAD_INNER_PADDING * widthScale
+    );
+    const playheadRadius = Math.max(4, BASE_PLAYHEAD_RADIUS * widthScale);
+    const minPlayheadCenter =
+      NOTE_LABEL_MARGIN + NOTE_LABEL_GAP + playheadOuterWidth / 2;
+    const playheadX = Math.max(
+      width * MIN_PLAYHEAD_FRACTION,
+      minPlayheadCenter
+    );
+    const playheadOuterX = playheadX - playheadOuterWidth / 2;
 
     ctx.clearRect(0, 0, width, height);
 
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
 
-    const innerWidth = PLAYHEAD_OUTER_WIDTH - PLAYHEAD_INNER_PADDING * 2;
-    const innerX = playheadOuterX + PLAYHEAD_INNER_PADDING;
+    const innerWidth = Math.max(
+      1,
+      playheadOuterWidth - playheadInnerPadding * 2
+    );
+    const innerX = playheadOuterX + playheadInnerPadding;
     const innerY = PLAYHEAD_VERTICAL_INSET;
     const innerHeight = Math.max(
       height - PLAYHEAD_VERTICAL_INSET * 2,
-      PLAYHEAD_RADIUS
+      playheadRadius
     );
     const playableTop = innerY + innerHeight * PLAYABLE_EDGE_RATIO;
     const playableBottom = innerY + innerHeight * (1 - PLAYABLE_EDGE_RATIO);
@@ -263,7 +295,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 
     ctx.strokeStyle = '#2a2a2a';
     ctx.lineWidth = 1;
-    const labelX = Math.max(4, playheadOuterX - 8);
+    const labelX = Math.max(NOTE_LABEL_MARGIN, playheadOuterX - NOTE_LABEL_GAP);
     ctx.font = '10px monospace';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
@@ -296,22 +328,22 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 
     const drawInstrument = () => {
       ctx.fillStyle = '#f5f5f5';
-      ctx.fillRect(playheadOuterX, 0, PLAYHEAD_OUTER_WIDTH, height);
+      ctx.fillRect(playheadOuterX, 0, playheadOuterWidth, height);
       ctx.fillStyle = '#111111';
+      const innerRadius = Math.max(2, playheadRadius - 4 * widthScale);
       drawRoundedRect(
         ctx,
         innerX,
         innerY,
         innerWidth,
         innerHeight,
-        PLAYHEAD_RADIUS - 4
+        innerRadius
       );
       ctx.fill();
     };
 
     drawInstrument();
 
-    let notesDrawn = 0;
     const activeNoteIndex = activeNoteIndexRef.current;
 
     ctx.save();
@@ -345,8 +377,6 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
         return;
       }
 
-      notesDrawn++;
-
       const isActiveNote =
         typeof activeNoteIndex === 'number' && index === activeNoteIndex;
 
@@ -375,14 +405,6 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
       ctx.strokeRect(drawStart, y, drawWidth, NOTE_HEIGHT);
     });
     ctx.restore();
-
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '12px monospace';
-    ctx.fillText(
-      `Time: ${effectiveTime.toFixed(2)}s / ${renderedTotalDuration.toFixed(2)}s | Notes: ${notes.length} | Drawn: ${notesDrawn}`,
-      10,
-      20
-    );
   }, [
     getDisplayTime,
     notes,
@@ -397,6 +419,10 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    if (syncedTimestampRef.current === 0) {
+      syncedTimestampRef.current = getTimestamp();
+    }
 
     const resizeObserver = new ResizeObserver(() => {
       renderFrame();
@@ -424,16 +450,14 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 
   useEffect(() => {
     syncedTimeRef.current = currentTime;
-    syncedTimestampRef.current =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    syncedTimestampRef.current = getTimestamp();
     if (!isPlayingRef.current) {
       renderFrame();
     }
   }, [currentTime, renderFrame]);
 
   useEffect(() => {
-    const now =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const now = getTimestamp();
     if (isPlayingRef.current && !isPlaying) {
       syncedTimeRef.current += (now - syncedTimestampRef.current) / 1000;
     }
@@ -458,8 +482,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     activeNoteIndexRef.current = findNoteIndexForEvent(activeNoteEvent);
 
     syncedTimeRef.current = activeNoteEvent.timeSeconds;
-    syncedTimestampRef.current =
-      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    syncedTimestampRef.current = getTimestamp();
 
     renderFrame();
   }, [activeNoteEvent, findNoteIndexForEvent, renderFrame]);
