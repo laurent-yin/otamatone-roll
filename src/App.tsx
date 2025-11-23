@@ -127,8 +127,8 @@ const App = () => {
     <div className="app">
       <header className="app-header">
         <div className="app-header-title">
-          <h1>Otamatone Roll</h1>
-          <p>ABC Notation Editor & Renderer</p>
+          <h1>Otama-Karaoke!</h1>
+          <p>Play along your favorite songs</p>
         </div>
         <div className="app-header-controls">
           <div
