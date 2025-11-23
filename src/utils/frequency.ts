@@ -18,8 +18,8 @@ export const frequencyToMidi = (frequency: number): number => {
   return A4_MIDI + 12 * Math.log2(frequency / A4_FREQUENCY);
 };
 
-export const DEFAULT_LOWEST_FREQUENCY = midiToFrequency(DEFAULT_LOWEST_MIDI);
-export const DEFAULT_HIGHEST_FREQUENCY = midiToFrequency(DEFAULT_HIGHEST_MIDI);
+export const DEFAULT_LOWEST_FREQUENCY = 204;
+export const DEFAULT_HIGHEST_FREQUENCY = 960;
 
 export const stemPosition = (fMin: number, fMax: number, f: number): number => {
   if (
