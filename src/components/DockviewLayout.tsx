@@ -30,6 +30,8 @@ interface DockviewLayoutProps {
   onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
   noteTimeline?: NoteTimeline | null;
   onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
+  lowestNoteHz?: number;
+  highestNoteHz?: number;
 }
 
 const EditorPanel = (
@@ -89,6 +91,8 @@ const OtamatoneRollPanel = (
     activeNoteEvent?: NotePlaybackEvent | null;
     noteCharTimes?: NoteCharTimeMap;
     noteTimeline?: NoteTimeline | null;
+    lowestNoteHz?: number;
+    highestNoteHz?: number;
   }>
 ) => {
   const notation = props.params?.notation || '';
@@ -97,6 +101,8 @@ const OtamatoneRollPanel = (
   const activeNoteEvent = props.params?.activeNoteEvent;
   const noteCharTimes = props.params?.noteCharTimes;
   const noteTimeline = props.params?.noteTimeline;
+  const lowestNoteHz = props.params?.lowestNoteHz;
+  const highestNoteHz = props.params?.highestNoteHz;
 
   return (
     <div className="otamatone-roll-panel">
@@ -107,6 +113,8 @@ const OtamatoneRollPanel = (
         activeNoteEvent={activeNoteEvent}
         noteCharTimes={noteCharTimes}
         noteTimeline={noteTimeline}
+        lowestNoteHz={lowestNoteHz}
+        highestNoteHz={highestNoteHz}
       />
     </div>
   );
@@ -126,6 +134,8 @@ export const DockviewLayout = ({
   onCharTimeMapChange,
   noteTimeline,
   onNoteTimelineChange,
+  lowestNoteHz,
+  highestNoteHz,
 }: DockviewLayoutProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dockview, setDockview] = useState<DockviewApi | null>(null);
@@ -243,6 +253,8 @@ export const DockviewLayout = ({
         activeNoteEvent,
         noteCharTimes,
         noteTimeline,
+        lowestNoteHz,
+        highestNoteHz,
       },
       initialWidth: 500,
     });
@@ -299,6 +311,8 @@ export const DockviewLayout = ({
         activeNoteEvent,
         noteCharTimes,
         noteTimeline,
+        lowestNoteHz,
+        highestNoteHz,
       });
     }
   }, [
@@ -316,6 +330,8 @@ export const DockviewLayout = ({
     noteTimeline,
     onNoteTimelineChange,
     audioContainerId,
+    lowestNoteHz,
+    highestNoteHz,
   ]);
 
   return <div ref={containerRef} className="dockview-container" />;
