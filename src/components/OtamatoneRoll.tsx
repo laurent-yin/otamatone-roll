@@ -20,6 +20,32 @@ const NOTE_HEIGHT = 6;
 const PITCH_PADDING = 1;
 const MIN_PITCH = 24;
 const MAX_PITCH = 108;
+const PLAYHEAD_OUTER_WIDTH = 28;
+const PLAYHEAD_INNER_PADDING = 5;
+const PLAYHEAD_VERTICAL_INSET = 12;
+const PLAYHEAD_RADIUS = 14;
+
+const drawRoundedRect = (
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) => {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+};
 
 export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
   notation,
@@ -145,6 +171,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     ctx.scale(dpr, dpr);
 
     const playheadX = width * 0.2;
+    const playheadOuterX = playheadX - PLAYHEAD_OUTER_WIDTH / 2;
 
     ctx.clearRect(0, 0, width, height);
 
@@ -171,18 +198,49 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
         : time;
     })();
 
+    const innerWidth = PLAYHEAD_OUTER_WIDTH - PLAYHEAD_INNER_PADDING * 2;
+    const innerX = playheadOuterX + PLAYHEAD_INNER_PADDING;
+    const innerY = PLAYHEAD_VERTICAL_INSET;
+    const innerHeight = Math.max(
+      height - PLAYHEAD_VERTICAL_INSET * 2,
+      PLAYHEAD_RADIUS
+    );
+
+    const drawInstrument = () => {
+      ctx.fillStyle = '#f5f5f5';
+      ctx.fillRect(playheadOuterX, 0, PLAYHEAD_OUTER_WIDTH, height);
+      ctx.fillStyle = '#111111';
+      drawRoundedRect(
+        ctx,
+        innerX,
+        innerY,
+        innerWidth,
+        innerHeight,
+        PLAYHEAD_RADIUS - 4
+      );
+      ctx.fill();
+    };
+
+    drawInstrument();
+
     let notesDrawn = 0;
     const activeNoteIndex = activeNoteIndexRef.current;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(innerX, 0, width - innerX, height);
+    ctx.clip();
 
     notes.forEach((note, index) => {
       const adjustedStart = noteStartTimes[index] ?? note.startTime;
       const timeDiff = adjustedStart - effectiveTime;
       const x = playheadX + timeDiff * PIXELS_PER_SECOND;
       const noteWidth = note.duration * PIXELS_PER_SECOND;
+      const noteRight = x + noteWidth;
       const pitchIndex = note.pitch - MIN_PITCH;
       const y = height - pitchIndex * pitchHeight - pitchHeight;
 
-      if (x + noteWidth < 0 || x > width) {
+      if (noteRight < innerX || x > width) {
         return;
       }
 
@@ -206,20 +264,20 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
         color = '#666666';
       }
 
+      const drawStart = Math.max(x, innerX);
+      const drawWidth = noteRight - drawStart;
+      if (drawWidth <= 0) {
+        return;
+      }
+
       ctx.fillStyle = color;
-      ctx.fillRect(x, y, noteWidth, NOTE_HEIGHT);
+      ctx.fillRect(drawStart, y, drawWidth, NOTE_HEIGHT);
 
       ctx.strokeStyle = '#000';
       ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, noteWidth, NOTE_HEIGHT);
+      ctx.strokeRect(drawStart, y, drawWidth, NOTE_HEIGHT);
     });
-
-    ctx.strokeStyle = '#ff4444';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(playheadX, 0);
-    ctx.lineTo(playheadX, height);
-    ctx.stroke();
+    ctx.restore();
 
     ctx.fillStyle = '#ffffff';
     ctx.font = '12px monospace';
