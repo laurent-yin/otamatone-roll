@@ -26,6 +26,11 @@ type TimingCallbacksWithEvents = {
   noteTimings?: TimingEvent[];
 };
 
+type TimingCallbacksInternal = TimingCallbacksWithEvents & {
+  replaceTarget?: (target: VisualObjWithTimings) => void;
+  qpm?: number;
+};
+
 type VisualObjWithAudioSupport = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   setUpAudio?: (options?: Record<string, any>) => unknown;
@@ -187,6 +192,72 @@ export const useAbcRenderer = ({
             }
           );
 
+          const internalCallbacks = timingCallbacks as TimingCallbacksInternal;
+
+          const getSecondsPerBeat = () => {
+            const qpm = internalCallbacks.qpm;
+            if (typeof qpm === 'number' && qpm > 0) {
+              return 60 / qpm;
+            }
+            return undefined;
+          };
+
+          const emitTimingDerivedData = () => {
+            const tuneWithTimings = visualObj[0] as VisualObjWithTimings;
+            const callbacksWithEvents =
+              timingCallbacks as TimingCallbacksWithEvents;
+            const timings = callbacksWithEvents.noteTimings;
+            if (!Array.isArray(timings) || timings.length === 0) {
+              resetDerivedData();
+              return;
+            }
+
+            const derived = buildTimingDerivedData(
+              tuneWithTimings,
+              timings as TimingEvent[],
+              { secondsPerBeat: getSecondsPerBeat() }
+            );
+            console.log('[TimingDerived] timeline stats', {
+              events: timings.length,
+              notes: derived.timeline.notes.length,
+              totalDuration: derived.timeline.totalDuration,
+            });
+            onCharTimeMapChange?.(derived.charMap);
+            onNoteTimelineChange?.(derived.timeline);
+          };
+
+          const refreshTimingForTempoChange = () => {
+            try {
+              const controller = synthControl as unknown as {
+                currentTempo?: number;
+                percent?: number;
+                isStarted?: boolean;
+              };
+              const tuneWithTimings = visualObj[0] as VisualObjWithTimings;
+              if (typeof controller.currentTempo === 'number') {
+                internalCallbacks.qpm = controller.currentTempo;
+              }
+              internalCallbacks.replaceTarget?.(tuneWithTimings);
+              if (typeof controller.percent === 'number') {
+                const wasRunning = Boolean(controller.isStarted);
+                const currentPercent = controller.percent;
+                timingCallbacks.stop();
+                timingCallbacks.setProgress(currentPercent);
+                if (wasRunning) {
+                  timingCallbacks.start(currentPercent);
+                }
+              } else {
+                timingCallbacks.stop();
+              }
+              emitTimingDerivedData();
+            } catch (tempoError) {
+              console.warn(
+                'Unable to refresh timing after tempo change',
+                tempoError
+              );
+            }
+          };
+
           const syncTimingWithSeek = () => {
             const controller = synthControl as unknown as {
               seek?: (percent: number, units?: number | string) => void;
@@ -244,6 +315,9 @@ export const useAbcRenderer = ({
                     timingCallbacks.start(offset);
                   } else {
                     timingCallbacks.pause();
+                    if (typeof controller.percent === 'number') {
+                      timingCallbacks.setProgress(controller.percent);
+                    }
                   }
                   onPlayingChange?.(isPlaying);
                   return result;
@@ -258,6 +332,9 @@ export const useAbcRenderer = ({
               controller.pause = () => {
                 console.log('[TimingState] pause intercepted');
                 timingCallbacks.pause();
+                if (typeof controller.percent === 'number') {
+                  timingCallbacks.setProgress(controller.percent);
+                }
                 onPlayingChange?.(false);
                 return originalPause();
               };
@@ -285,31 +362,25 @@ export const useAbcRenderer = ({
             }
           };
 
+          const syncTimingWithTempoChanges = () => {
+            const controller = synthControl as unknown as {
+              setWarp?: (warp: number) => Promise<unknown>;
+              percent?: number;
+              isStarted?: boolean;
+            };
+            if (typeof controller.setWarp === 'function') {
+              const originalSetWarp = controller.setWarp.bind(synthControl);
+              controller.setWarp = (warp: number) =>
+                originalSetWarp(warp).then((result) => {
+                  refreshTimingForTempoChange();
+                  return result;
+                });
+            }
+          };
+
           syncTimingWithSeek();
           syncTimingWithPlayback();
-
-          const emitTimingDerivedData = () => {
-            const tuneWithTimings = visualObj[0] as VisualObjWithTimings;
-            const callbacksWithEvents =
-              timingCallbacks as TimingCallbacksWithEvents;
-            const timings = callbacksWithEvents.noteTimings;
-            if (!Array.isArray(timings) || timings.length === 0) {
-              resetDerivedData();
-              return;
-            }
-
-            const derived = buildTimingDerivedData(
-              tuneWithTimings,
-              timings as TimingEvent[]
-            );
-            console.log('[TimingDerived] timeline stats', {
-              events: timings.length,
-              notes: derived.timeline.notes.length,
-              totalDuration: derived.timeline.totalDuration,
-            });
-            onCharTimeMapChange?.(derived.charMap);
-            onNoteTimelineChange?.(derived.timeline);
-          };
+          syncTimingWithTempoChanges();
 
           emitTimingDerivedData();
 

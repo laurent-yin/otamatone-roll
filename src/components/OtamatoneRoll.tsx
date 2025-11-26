@@ -103,15 +103,36 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
-  const { notes, totalDuration, secondsPerBeat } = useOtamatoneRollNotes(
-    notation,
-    noteTimeline
-  );
+  const {
+    notes,
+    totalDuration,
+    baselineSecondsPerBeat,
+    playbackSecondsPerBeat,
+  } = useOtamatoneRollNotes(notation, noteTimeline);
   const effectiveSecondsPerBeat =
-    typeof secondsPerBeat === 'number' && secondsPerBeat > 0
-      ? secondsPerBeat
+    typeof baselineSecondsPerBeat === 'number' && baselineSecondsPerBeat > 0
+      ? baselineSecondsPerBeat
       : DEFAULT_SECONDS_PER_BEAT;
-  const syncedTimeRef = useRef(currentTime);
+  const warpRatio = useMemo(() => {
+    if (
+      typeof playbackSecondsPerBeat === 'number' &&
+      playbackSecondsPerBeat > 0
+    ) {
+      return playbackSecondsPerBeat / effectiveSecondsPerBeat;
+    }
+    return 1;
+  }, [playbackSecondsPerBeat, effectiveSecondsPerBeat]);
+  const warpSafe = Number.isFinite(warpRatio) && warpRatio > 0 ? warpRatio : 1;
+  const convertPlaybackTime = useCallback(
+    (time?: number) => {
+      if (typeof time !== 'number' || !Number.isFinite(time)) {
+        return undefined;
+      }
+      return time / warpSafe;
+    },
+    [warpSafe]
+  );
+  const syncedTimeRef = useRef(convertPlaybackTime(currentTime) ?? 0);
   const syncedTimestampRef = useRef<number>(0);
   const isPlayingRef = useRef(isPlaying);
   const activeNoteIndexRef = useRef<number | null>(null);
@@ -178,11 +199,14 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
         noteCharTimes &&
         typeof noteCharTimes[startChar] === 'number'
       ) {
-        return noteCharTimes[startChar];
+        const converted = convertPlaybackTime(noteCharTimes[startChar]);
+        if (typeof converted === 'number') {
+          return converted;
+        }
       }
       return note.startTime;
     });
-  }, [notes, noteCharTimes]);
+  }, [convertPlaybackTime, notes, noteCharTimes]);
 
   const renderedTotalDuration = useMemo(() => {
     let maxEnd = totalDuration;
@@ -205,6 +229,8 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
         }
       }
 
+      const baselineTime = convertPlaybackTime(event.timeSeconds);
+
       if (event.midiPitches.length > 0) {
         const midiSet = new Set(event.midiPitches);
         let bestIndex: number | null = null;
@@ -215,7 +241,10 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
             return;
           }
           const adjustedStart = noteStartTimes[index] ?? note.startTime;
-          const delta = Math.abs(adjustedStart - event.timeSeconds);
+          const delta =
+            typeof baselineTime === 'number'
+              ? Math.abs(adjustedStart - baselineTime)
+              : Number.POSITIVE_INFINITY;
           if (delta < smallestDelta) {
             smallestDelta = delta;
             bestIndex = index;
@@ -229,17 +258,17 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 
       return null;
     },
-    [noteIndexByStartChar, notes, noteStartTimes]
+    [convertPlaybackTime, noteIndexByStartChar, notes, noteStartTimes]
   );
 
   const getDisplayTime = useCallback(() => {
     const now = getTimestamp();
     if (isPlayingRef.current) {
       const elapsed = (now - syncedTimestampRef.current) / 1000;
-      return syncedTimeRef.current + elapsed;
+      return syncedTimeRef.current + elapsed / warpSafe;
     }
     return syncedTimeRef.current;
-  }, []);
+  }, [warpSafe]);
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -373,8 +402,9 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     notes.forEach((note, index) => {
       const adjustedStart = noteStartTimes[index] ?? note.startTime;
       const timeDiff = adjustedStart - effectiveTime;
+      const effectiveDuration = Math.max(note.duration, 0);
       const x = playheadX + timeDiff * pixelsPerSecond;
-      const noteWidth = note.duration * pixelsPerSecond;
+      const noteWidth = effectiveDuration * pixelsPerSecond;
       const noteRight = x + noteWidth;
       const noteFrequency = midiToFrequency(note.pitch);
       const normalized = stemPosition(
@@ -471,24 +501,28 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
   }, [renderFrame]);
 
   useEffect(() => {
-    syncedTimeRef.current = currentTime;
+    const baselineTime = convertPlaybackTime(currentTime);
+    if (typeof baselineTime === 'number') {
+      syncedTimeRef.current = baselineTime;
+    }
     syncedTimestampRef.current = getTimestamp();
     if (!isPlayingRef.current) {
       renderFrame();
     }
-  }, [currentTime, renderFrame]);
+  }, [convertPlaybackTime, currentTime, renderFrame]);
 
   useEffect(() => {
     const now = getTimestamp();
     if (isPlayingRef.current && !isPlaying) {
-      syncedTimeRef.current += (now - syncedTimestampRef.current) / 1000;
+      syncedTimeRef.current +=
+        (now - syncedTimestampRef.current) / 1000 / warpSafe;
     }
     syncedTimestampRef.current = now;
     isPlayingRef.current = isPlaying;
     if (!isPlaying) {
       renderFrame();
     }
-  }, [isPlaying, renderFrame]);
+  }, [isPlaying, renderFrame, warpSafe]);
 
   useEffect(() => {
     if (!activeNoteEvent) {
@@ -503,11 +537,19 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     latestEventIdRef.current = activeNoteEvent.sequenceId;
     activeNoteIndexRef.current = findNoteIndexForEvent(activeNoteEvent);
 
-    syncedTimeRef.current = activeNoteEvent.timeSeconds;
+    const baselineTime = convertPlaybackTime(activeNoteEvent.timeSeconds);
+    if (typeof baselineTime === 'number') {
+      syncedTimeRef.current = baselineTime;
+    }
     syncedTimestampRef.current = getTimestamp();
 
     renderFrame();
-  }, [activeNoteEvent, findNoteIndexForEvent, renderFrame]);
+  }, [
+    activeNoteEvent,
+    convertPlaybackTime,
+    findNoteIndexForEvent,
+    renderFrame,
+  ]);
 
   useEffect(() => {
     activeNoteIndexRef.current = null;

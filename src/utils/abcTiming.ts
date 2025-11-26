@@ -61,7 +61,8 @@ const getSecondsPerWholeNote = (
 
 export const buildTimingDerivedData = (
   visualObj: VisualObjWithTimings,
-  timings: TimingEvent[]
+  timings: TimingEvent[],
+  options?: { secondsPerBeat?: number }
 ): { charMap: NoteCharTimeMap; timeline: NoteTimeline } => {
   const mapping: NoteCharTimeMap = {};
   const notes: Note[] = [];
@@ -73,6 +74,8 @@ export const buildTimingDerivedData = (
     visualObj,
     firstTimingWithMeasure?.millisecondsPerMeasure
   );
+  const fallbackSecondsPerBeat =
+    secondsPerWholeNote > 0 ? secondsPerWholeNote / 4 : undefined;
 
   let maxEndSeconds = 0;
 
@@ -158,6 +161,7 @@ export const buildTimingDerivedData = (
     timeline: {
       notes,
       totalDuration: maxEndSeconds,
+      secondsPerBeat: options?.secondsPerBeat ?? fallbackSecondsPerBeat,
     },
   };
 };

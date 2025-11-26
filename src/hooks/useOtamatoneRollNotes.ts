@@ -2,6 +2,38 @@ import { useMemo } from 'react';
 import abcjs from 'abcjs';
 import { Note, NoteTimeline } from '../types/music';
 
+export type OtamatoneRollNotesResult = NoteTimeline & {
+  baselineSecondsPerBeat: number;
+  playbackSecondsPerBeat: number;
+};
+
+const isPositiveNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+export const computeWarpRatio = (
+  baselineSecondsPerBeat: number,
+  playbackSecondsPerBeat?: number
+) => {
+  if (!isPositiveNumber(baselineSecondsPerBeat)) {
+    return 1;
+  }
+  if (!isPositiveNumber(playbackSecondsPerBeat)) {
+    return 1;
+  }
+  return playbackSecondsPerBeat / baselineSecondsPerBeat;
+};
+
+export const normalizeTimelineToBaseline = (
+  timeline: NoteTimeline,
+  baselineSecondsPerBeat: number
+): NoteTimeline => {
+  return {
+    notes: timeline.notes.map((note) => ({ ...note })),
+    totalDuration: timeline.totalDuration,
+    secondsPerBeat: baselineSecondsPerBeat,
+  };
+};
+
 interface AbcPitch {
   pitch: number;
   octave?: number;
@@ -52,12 +84,8 @@ const getTempoDetails = (tune: AbcjsTuneLike) => {
 export const useOtamatoneRollNotes = (
   notation: string,
   override?: NoteTimeline | null
-) => {
-  const result = useMemo(() => {
-    if (override) {
-      return override;
-    }
-
+): OtamatoneRollNotesResult => {
+  const baseline = useMemo(() => {
     if (!notation || notation.trim() === '') {
       return {
         notes: [],
@@ -71,7 +99,7 @@ export const useOtamatoneRollNotes = (
       const tunes = abcjs.parseOnly(notation);
 
       if (!tunes || tunes[0] === undefined) {
-        return { notes: [], totalDuration: 0 };
+        return { notes: [], totalDuration: 0, secondsPerBeat: undefined };
       }
 
       const tune = tunes[0];
@@ -187,9 +215,32 @@ export const useOtamatoneRollNotes = (
         secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
       };
     }
-  }, [notation, override]);
+  }, [notation]);
 
-  return override ?? result;
+  return useMemo<OtamatoneRollNotesResult>(() => {
+    const baselineSecondsPerBeat =
+      typeof baseline.secondsPerBeat === 'number'
+        ? baseline.secondsPerBeat
+        : DEFAULT_SECONDS_PER_BEAT;
+
+    const sourceTimeline = override ?? baseline;
+    const playbackSecondsPerBeat = isPositiveNumber(
+      sourceTimeline.secondsPerBeat
+    )
+      ? (sourceTimeline.secondsPerBeat as number)
+      : baselineSecondsPerBeat;
+
+    const normalizedTimeline = normalizeTimelineToBaseline(
+      sourceTimeline,
+      baselineSecondsPerBeat
+    );
+
+    return {
+      ...normalizedTimeline,
+      baselineSecondsPerBeat,
+      playbackSecondsPerBeat,
+    };
+  }, [baseline, override]);
 };
 
 const BASE_MIDI_FOR_C = 60; // Treat pitch 0 ("C") as middle C.
