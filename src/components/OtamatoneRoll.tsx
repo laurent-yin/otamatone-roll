@@ -45,6 +45,7 @@ const MIN_PLAYHEAD_FRACTION = 0.12;
 const BEATS_PER_VERTICAL_SPAN = 4;
 const FALLBACK_PIXELS_PER_SECOND = 100;
 const NOTE_THICKNESS_RATIO = 0.7; // portion of inner width used for note thickness
+const CHORD_ALIGNMENT_TOLERANCE = 1e-3; // seconds; treat chord starts within this as simultaneous
 
 const getTimestamp = () =>
   typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -187,7 +188,16 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     const map = new Map<number, number>();
     notes.forEach((note, index) => {
       const startChar = note.source?.startChar;
-      if (typeof startChar === 'number' && !map.has(startChar)) {
+      if (typeof startChar !== 'number') {
+        return;
+      }
+      const existingIndex = map.get(startChar);
+      if (typeof existingIndex !== 'number') {
+        map.set(startChar, index);
+        return;
+      }
+      const existingNote = notes[existingIndex];
+      if (!existingNote || note.pitch > existingNote.pitch) {
         map.set(startChar, index);
       }
     });
@@ -225,7 +235,9 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 
   const findNoteIndexForEvent = useCallback(
     (event: NotePlaybackEvent): number | null => {
-      if (typeof event.startChar === 'number') {
+      const isChordEvent = event.midiPitches.length > 1;
+
+      if (!isChordEvent && typeof event.startChar === 'number') {
         const match = noteIndexByStartChar.get(event.startChar);
         if (typeof match === 'number') {
           return match;
@@ -236,8 +248,15 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 
       if (event.midiPitches.length > 0) {
         const midiSet = new Set(event.midiPitches);
+        const chordMaxPitch = event.midiPitches.reduce(
+          (max, value) =>
+            typeof value === 'number' ? Math.max(max, value) : max,
+          Number.NEGATIVE_INFINITY
+        );
         let bestIndex: number | null = null;
         let smallestDelta = Number.POSITIVE_INFINITY;
+        let bestPitch = -Infinity;
+        let bestPitchPriority = -1;
 
         notes.forEach((note, index) => {
           if (!midiSet.has(note.pitch)) {
@@ -248,9 +267,24 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
             typeof baselineTime === 'number'
               ? Math.abs(adjustedStart - baselineTime)
               : Number.POSITIVE_INFINITY;
-          if (delta < smallestDelta) {
+          const pitchPriority = note.pitch === chordMaxPitch ? 1 : 0;
+          const improvesPitchPriority = pitchPriority > bestPitchPriority;
+          const matchesPitchPriority = pitchPriority === bestPitchPriority;
+          const isClearlyCloser =
+            delta + CHORD_ALIGNMENT_TOLERANCE < smallestDelta;
+          const isSimilarTiming =
+            Math.abs(delta - smallestDelta) <= CHORD_ALIGNMENT_TOLERANCE;
+          if (
+            improvesPitchPriority ||
+            (matchesPitchPriority &&
+              (isClearlyCloser ||
+                (isSimilarTiming &&
+                  (bestIndex === null || note.pitch > bestPitch))))
+          ) {
+            bestPitchPriority = pitchPriority;
             smallestDelta = delta;
             bestIndex = index;
+            bestPitch = note.pitch;
           }
         });
 

@@ -269,4 +269,69 @@ abcd || e4- eedf- | f2
     expect(boundaries).toEqual([1, 3]);
     expect(derived.timeline.beatBoundaries).toEqual([1, 2, 3]);
   });
+
+  it('identifies the top pitch for the Dm chord example', () => {
+    const containerId = 'abc-leading-tone';
+    document.body.innerHTML = `<div id="${containerId}"></div>`;
+
+    const notation = `X:1
+P:ABBACA
+M:2/4
+L:1/16
+Q:1/4=65
+K:Dm clef=treble
+P:A
+ab[CGd]4
+`;
+
+    const visualObjs = abcjs.renderAbc(containerId, notation, {
+      responsive: 'resize',
+    });
+
+    expect(visualObjs).toHaveLength(1);
+
+    const [visualObj] = visualObjs;
+    type VisualObjWithOptionalAudio = VisualObjWithTimings & {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setUpAudio?: (options?: Record<string, any>) => unknown;
+    };
+
+    const visualObjWithAudio = visualObj as VisualObjWithOptionalAudio;
+    if (typeof visualObjWithAudio.setUpAudio === 'function') {
+      visualObjWithAudio.setUpAudio({ qpm: 65 });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const timingCallbacks = new (abcjs.TimingCallbacks as any)(visualObj, {});
+    const timings = (timingCallbacks as { noteTimings?: TimingEvent[] })
+      .noteTimings;
+
+    expect(timings).toBeDefined();
+
+    const derived = buildTimingDerivedData(
+      visualObj as VisualObjWithTimings,
+      (timings ?? []) as TimingEvent[]
+    );
+
+    const groupedByStart = new Map<number, number[]>();
+    derived.timeline.notes.forEach((note) => {
+      const key = Number(note.startTime.toFixed(6));
+      const existing = groupedByStart.get(key) ?? [];
+      existing.push(note.pitch);
+      groupedByStart.set(key, existing);
+    });
+
+    const chordGroup = Array.from(groupedByStart.values()).find(
+      (group) => group.length >= 3
+    );
+
+    expect(chordGroup).toBeDefined();
+    const pitches = chordGroup ?? [];
+    const highestPitch = Math.max(...pitches);
+    const lowestPitch = Math.min(...pitches);
+
+    expect(pitches).toContain(74); // D above middle C
+    expect(highestPitch).toBe(74);
+    expect(highestPitch).toBeGreaterThan(lowestPitch);
+  });
 });
