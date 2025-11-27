@@ -109,6 +109,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     baselineSecondsPerBeat,
     playbackSecondsPerBeat,
     measureBoundaries = [] as number[],
+    beatBoundaries = [] as number[],
   } = useOtamatoneRollNotes(notation, noteTimeline);
   const effectiveSecondsPerBeat =
     typeof baselineSecondsPerBeat === 'number' && baselineSecondsPerBeat > 0
@@ -393,42 +394,70 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     };
 
     drawInstrument();
-    const drawMeasureMarkers = () => {
-      if (!measureBoundaries.length) {
+    const drawMarkers = (
+      markers: number[],
+      options: {
+        width: number;
+        color: string;
+        filter?: (value: number) => boolean;
+        onFirstVisible?: (info: { position: number; centerX: number }) => void;
+      }
+    ) => {
+      if (!markers.length) {
         return;
       }
-      const barWidth = Math.max(1, 2 * widthScale);
+      const markerWidth = Math.max(0.5, options.width);
       ctx.save();
       ctx.beginPath();
       ctx.rect(innerX, innerY, width - innerX, innerHeight);
       ctx.clip();
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
-      let firstBoundarySeconds: number | null = null;
-      let firstBoundaryCenterX: number | null = null;
-      measureBoundaries.forEach((boundary) => {
-        if (typeof boundary !== 'number' || !Number.isFinite(boundary)) {
+      ctx.fillStyle = options.color;
+      let firstVisible: { position: number; centerX: number } | null = null;
+      markers.forEach((marker) => {
+        if (typeof marker !== 'number' || !Number.isFinite(marker)) {
+          return;
+        }
+        if (options.filter && !options.filter(marker)) {
           return;
         }
         const centerX =
-          playheadX + (boundary - effectiveTime) * pixelsPerSecond;
-        if (centerX + barWidth < innerX || centerX - barWidth > width) {
+          playheadX + (marker - effectiveTime) * pixelsPerSecond;
+        if (centerX + markerWidth < innerX || centerX - markerWidth > width) {
           return;
         }
-        ctx.fillRect(centerX - barWidth / 2, innerY, barWidth, innerHeight);
-        if (firstBoundarySeconds === null || firstBoundaryCenterX === null) {
-          firstBoundarySeconds = boundary;
-          firstBoundaryCenterX = centerX;
+        ctx.fillRect(centerX - markerWidth / 2, innerY, markerWidth, innerHeight);
+        if (!firstVisible) {
+          firstVisible = { position: marker, centerX };
         }
       });
-      if (
-        typeof firstBoundarySeconds === 'number' &&
-        typeof firstBoundaryCenterX === 'number'
-      ) {
-        const boundarySecondsValue = firstBoundarySeconds as number;
-        const boundaryCenterXValue = firstBoundaryCenterX as number;
+      if (firstVisible && options.onFirstVisible) {
+        options.onFirstVisible(firstVisible);
+      }
+      ctx.restore();
+    };
+
+    const measureNearBeatEpsilon = Math.max(1e-3, effectiveSecondsPerBeat / 100);
+    const skipBeatsNearMeasures = (value: number) => {
+      return measureBoundaries.some(
+        (boundary) => Math.abs(boundary - value) < measureNearBeatEpsilon
+      );
+    };
+
+    const thinLineWidth = Math.max(1, widthScale);
+    drawMarkers(beatBoundaries, {
+      width: thinLineWidth,
+      color: 'rgba(255, 255, 255, 0.12)',
+      filter: (value) => !skipBeatsNearMeasures(value),
+    });
+
+    const barWidth = Math.max(2, 4 * widthScale);
+    drawMarkers(measureBoundaries, {
+      width: barWidth,
+      color: 'rgba(255, 255, 255, 0.35)',
+      onFirstVisible: ({ position, centerX }) => {
         const summaryObject = {
-          boundarySeconds: Number(boundarySecondsValue.toFixed(4)),
-          canvasX: Number(boundaryCenterXValue.toFixed(2)),
+          boundarySeconds: Number(position.toFixed(4)),
+          canvasX: Number(centerX.toFixed(2)),
           effectiveTime: Number(effectiveTime.toFixed(3)),
           pixelsPerSecond: Number(pixelsPerSecond.toFixed(2)),
         };
@@ -441,11 +470,8 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
             innerX: Number(innerX.toFixed(2)),
           });
         }
-      }
-      ctx.restore();
-    };
-
-    drawMeasureMarkers();
+      },
+    });
 
     const activeNoteIndex = activeNoteIndexRef.current;
 
@@ -522,6 +548,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     maxFrequency,
     effectiveSecondsPerBeat,
     measureBoundaries,
+    beatBoundaries,
   ]);
 
   useEffect(() => {

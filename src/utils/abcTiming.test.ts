@@ -64,6 +64,7 @@ describe('buildTimingDerivedData', () => {
     expect(thirdNote).toMatchObject({ pitch: 67, startTime: 1.25 });
     expect(timeline.totalDuration).toBeCloseTo(1.5);
     expect(timeline.measureBoundaries).toEqual([]);
+    expect(timeline.beatBoundaries).toEqual([0.5, 1]);
   });
 
   it('derives timing from beat-based data when milliseconds are missing', () => {
@@ -93,6 +94,8 @@ describe('buildTimingDerivedData', () => {
     expect(note.duration).toBeCloseTo(1.2, 5);
     expect(timeline.totalDuration).toBeCloseTo(4.8, 5);
     expect(timeline.measureBoundaries).toEqual([1.8, 3.6]);
+    expect(timeline.beatBoundaries?.[0]).toBeCloseTo(0.6, 5);
+    expect(timeline.beatBoundaries?.slice(-1)[0]).toBeCloseTo(4.2, 5);
   });
 
   it('records measure boundaries from bar events when provided', () => {
@@ -116,6 +119,7 @@ describe('buildTimingDerivedData', () => {
     const { timeline } = buildTimingDerivedData(baseVisualObj, timings);
 
     expect(timeline.measureBoundaries).toEqual([2, 4]);
+    expect(timeline.beatBoundaries).toEqual([0.5, 1, 1.5, 2, 2.5]);
   });
 
   it('derives measure boundaries from barNumber increments when bar events are absent', () => {
@@ -146,6 +150,7 @@ describe('buildTimingDerivedData', () => {
     const { timeline } = buildTimingDerivedData(baseVisualObj, timings);
 
     expect(timeline.measureBoundaries).toEqual([0.5, 1.5]);
+    expect(timeline.beatBoundaries).toEqual([0.5, 1, 1.5]);
   });
 });
 
@@ -210,7 +215,8 @@ C _D D _E | E F _G G |
       expect(entry.duration).toBeGreaterThan(0);
     });
 
-    expect(derived.timeline.measureBoundaries?.[0]).toBeCloseTo(2, 2);
+    expect(derived.timeline.measureBoundaries).toEqual([2]);
+    expect(derived.timeline.beatBoundaries).toEqual([0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
   });
 
   it('respects pickup measures when deriving boundaries', () => {
@@ -259,5 +265,6 @@ abcd || e4- eedf- | f2
       Number(value.toFixed(3))
     );
     expect(boundaries).toEqual([1, 3]);
+    expect(derived.timeline.beatBoundaries).toEqual([1, 2, 3]);
   });
 });

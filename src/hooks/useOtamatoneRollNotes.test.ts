@@ -36,6 +36,7 @@ describe('createOtamatoneRollNotesResult', () => {
     notes: [makeNote(0, 1)],
     totalDuration: 1,
     secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
+    beatBoundaries: [DEFAULT_SECONDS_PER_BEAT],
   };
 
   it('falls back to baseline when override is missing', () => {
@@ -83,12 +84,14 @@ describe('createOtamatoneRollNotesResult', () => {
       totalDuration: 1,
       secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
       measureBoundaries: [1, 2, 3],
+      beatBoundaries: [0.5, 1, 1.5],
     };
     const overrideWithBars: NoteTimeline = {
       notes: [makeNote(0, 2)],
       totalDuration: 2,
       secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
       measureBoundaries: [2],
+      beatBoundaries: [0.5, 1],
     };
 
     const result = createOtamatoneRollNotesResult(
@@ -97,6 +100,7 @@ describe('createOtamatoneRollNotesResult', () => {
     );
 
     expect(result.measureBoundaries).toEqual([2]);
+    expect(result.beatBoundaries).toEqual([0.5, 1]);
   });
 });
 
@@ -109,6 +113,7 @@ describe('normalizeTimelineToBaseline', () => {
       totalDuration: 2,
       secondsPerBeat: baselineSecondsPerBeat,
       measureBoundaries: [2, 4],
+      beatBoundaries: [0.5, 1, 1.5],
     };
 
     const normalized = normalizeTimelineToBaseline(
@@ -124,6 +129,8 @@ describe('normalizeTimelineToBaseline', () => {
     expect(normalized.measureBoundaries).not.toBe(
       baselineTimeline.measureBoundaries
     );
+    expect(normalized.beatBoundaries).toEqual([0.5, 1, 1.5]);
+    expect(normalized.beatBoundaries).not.toBe(baselineTimeline.beatBoundaries);
   });
 
   it('stretches note timings back to baseline when playback is slower', () => {
@@ -228,5 +235,6 @@ describe('buildBaselineTimelineFromNotation', () => {
     expect(laterNote?.startTime).toBeCloseTo(1);
     expect(timeline.secondsPerBeat).toBeCloseTo(0.5);
     expect(timeline.measureBoundaries).toEqual([]);
+    expect(timeline.beatBoundaries).toEqual([0.5, 1]);
   });
 });

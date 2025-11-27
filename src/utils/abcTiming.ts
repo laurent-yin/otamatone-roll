@@ -70,8 +70,9 @@ export const buildTimingDerivedData = (
   const mapping: NoteCharTimeMap = {};
   const notes: Note[] = [];
   const measureBoundaries: number[] = [];
+  const beatBoundaries: number[] = [];
 
-  const addMeasureBoundary = (timeSeconds?: number) => {
+  const addBoundary = (collection: number[], timeSeconds?: number) => {
     if (
       typeof timeSeconds !== 'number' ||
       !Number.isFinite(timeSeconds) ||
@@ -80,12 +81,16 @@ export const buildTimingDerivedData = (
       return;
     }
     const normalized = Number(timeSeconds.toFixed(6));
-    const last = measureBoundaries[measureBoundaries.length - 1];
+    const last = collection[collection.length - 1];
     if (typeof last === 'number' && Math.abs(last - normalized) < 1e-4) {
       return;
     }
-    measureBoundaries.push(normalized);
+    collection.push(normalized);
   };
+  const addMeasureBoundary = (timeSeconds?: number) =>
+    addBoundary(measureBoundaries, timeSeconds);
+  const addBeatBoundary = (timeSeconds?: number) =>
+    addBoundary(beatBoundaries, timeSeconds);
 
   const meterFraction =
     typeof visualObj?.getMeterFraction === 'function'
@@ -262,6 +267,19 @@ export const buildTimingDerivedData = (
     }
   }
 
+  if (
+    typeof baselineSecondsPerBeat === 'number' &&
+    baselineSecondsPerBeat > 0
+  ) {
+    for (
+      let beatTime = baselineSecondsPerBeat;
+      beatTime < maxEndSeconds - 1e-4;
+      beatTime += baselineSecondsPerBeat
+    ) {
+      addBeatBoundary(beatTime);
+    }
+  }
+
   if (typeof console !== 'undefined' && typeof console.debug === 'function') {
     const preview = measureBoundaries
       .slice(0, 5)
@@ -271,6 +289,10 @@ export const buildTimingDerivedData = (
       secondsPerBeat: baselineSecondsPerBeat,
       measurePreview: preview,
       measureCount: measureBoundaries.length,
+      beatPreview: beatBoundaries
+        .slice(0, 5)
+        .map((value) => Number(value.toFixed(4))),
+      beatCount: beatBoundaries.length,
     });
   }
 
@@ -281,6 +303,7 @@ export const buildTimingDerivedData = (
       totalDuration: maxEndSeconds,
       secondsPerBeat: baselineSecondsPerBeat,
       measureBoundaries,
+      beatBoundaries,
     },
   };
 };

@@ -33,6 +33,7 @@ const createEmptyTimeline = (secondsPerBeat = DEFAULT_SECONDS_PER_BEAT) => ({
   totalDuration: 0,
   secondsPerBeat,
   measureBoundaries: [],
+  beatBoundaries: [],
 });
 
 const extractSecondsPerBeat = (qpm?: number): number | undefined => {
@@ -145,6 +146,9 @@ export const normalizeTimelineToBaseline = (
     secondsPerBeat: baselineSecondsPerBeat,
     measureBoundaries: Array.isArray(timeline.measureBoundaries)
       ? [...timeline.measureBoundaries]
+      : [],
+    beatBoundaries: Array.isArray(timeline.beatBoundaries)
+      ? [...timeline.beatBoundaries]
       : [],
   };
 };
