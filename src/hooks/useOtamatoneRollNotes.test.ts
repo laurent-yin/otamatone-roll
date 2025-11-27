@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import abcjs from 'abcjs';
 import { Note, NoteTimeline } from '../types/music';
+import { TimingEvent } from '../utils/abcTiming';
 import {
   normalizeTimelineToBaseline,
   createOtamatoneRollNotesResult,
@@ -12,12 +13,16 @@ vi.mock('abcjs', () => {
   return {
     __esModule: true,
     default: {
-      parseOnly: vi.fn(),
+      renderAbc: vi.fn(),
+      TimingCallbacks: vi.fn(),
     },
   };
 });
 
-const getParseOnlyMock = () => vi.mocked(abcjs.parseOnly);
+const getRenderAbcMock = () =>
+  abcjs.renderAbc as unknown as ReturnType<typeof vi.fn>;
+const getTimingCallbacksCtorMock = () =>
+  abcjs.TimingCallbacks as unknown as ReturnType<typeof vi.fn>;
 
 const makeNote = (startTime: number, duration: number): Note => ({
   pitch: 60,
@@ -135,64 +140,65 @@ describe('normalizeTimelineToBaseline', () => {
 
 describe('buildBaselineTimelineFromNotation', () => {
   beforeEach(() => {
-    getParseOnlyMock().mockReset();
+    getRenderAbcMock().mockReset();
+    getTimingCallbacksCtorMock().mockReset();
   });
 
-  it('returns one note per pitch in a chord and merges ties per pitch', () => {
-    getParseOnlyMock().mockReturnValue([
-      {
-        getBpm: () => 120,
-        getBeatLength: () => 0.25,
-        lines: [
-          {
-            staff: [
-              {
-                key: undefined,
-                voices: [
-                  [
-                    {
-                      el_type: 'note',
-                      duration: 0.5,
-                      startChar: 0,
-                      endChar: 5,
-                      pitches: [
-                        { pitch: 0, tie: 'start' },
-                        { pitch: 2 },
-                        { pitch: 4 },
-                      ],
-                    },
-                    {
-                      el_type: 'note',
-                      duration: 0.5,
-                      startChar: 6,
-                      endChar: 10,
-                      pitches: [{ pitch: 0, tie: 'end' }, { pitch: 7 }],
-                    },
-                  ],
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ] as unknown as ReturnType<typeof abcjs.parseOnly>);
+  it('derives notes from abcjs timing callbacks', () => {
+    const visualObj = {
+      setUpAudio: vi.fn(),
+      getMeterFraction: () => ({ num: 4, den: 4 }),
+      millisecondsPerMeasure: () => 2000,
+    };
+    getRenderAbcMock().mockReturnValue([visualObj]);
+
+    const timingCallbacksInstance = {
+      replaceTarget: vi.fn(),
+      noteTimings: [
+        {
+          type: 'event',
+          milliseconds: 0,
+          duration: 1000,
+          startCharArray: [0, 0, 0],
+          endCharArray: [5, 5, 5],
+          midiPitches: [{ pitch: 60 }, { pitch: 64 }, { pitch: 67 }],
+        },
+        {
+          type: 'event',
+          milliseconds: 1000,
+          duration: 500,
+          startCharArray: [6],
+          endCharArray: [10],
+          midiPitches: [{ pitch: 72 }],
+        },
+      ] as TimingEvent[],
+      qpm: 120,
+    };
+
+    getTimingCallbacksCtorMock().mockImplementation(
+      function MockTimingCallbacks() {
+        return timingCallbacksInstance;
+      }
+    );
 
     const timeline = buildBaselineTimelineFromNotation('ignored');
 
     expect(timeline.notes).toHaveLength(4);
-
     const simultaneousPitches = timeline.notes
       .filter((note) => note.startTime === 0)
       .map((note) => note.pitch)
       .sort();
     expect(simultaneousPitches).toEqual([60, 64, 67]);
 
-    const tiedPitch = timeline.notes.find((note) => note.pitch === 60);
-    expect(tiedPitch?.duration).toBeCloseTo(2);
+    const sustained = timeline.notes.find(
+      (note) => note.pitch === 60 && note.startTime === 0
+    );
+    expect(sustained?.duration).toBeCloseTo(1);
 
     const laterNote = timeline.notes.find(
-      (note) => note.startTime > 0 && note.pitch === 72
+      (note) => note.pitch === 72 && note.startTime > 0
     );
     expect(laterNote?.startTime).toBeCloseTo(1);
+    expect(timeline.secondsPerBeat).toBeCloseTo(0.5);
   });
 });
