@@ -63,6 +63,7 @@ describe('buildTimingDerivedData', () => {
     });
     expect(thirdNote).toMatchObject({ pitch: 67, startTime: 1.25 });
     expect(timeline.totalDuration).toBeCloseTo(1.5);
+    expect(timeline.measureBoundaries).toEqual([]);
   });
 
   it('derives timing from beat-based data when milliseconds are missing', () => {
@@ -91,6 +92,60 @@ describe('buildTimingDerivedData', () => {
     expect(note.startTime).toBeCloseTo(3.6, 5);
     expect(note.duration).toBeCloseTo(1.2, 5);
     expect(timeline.totalDuration).toBeCloseTo(4.8, 5);
+    expect(timeline.measureBoundaries).toEqual([1.8, 3.6]);
+  });
+
+  it('records measure boundaries from bar events when provided', () => {
+    const timings: TimingEvent[] = [
+      {
+        type: 'event',
+        milliseconds: 0,
+        duration: 1000,
+        midiPitches: [{ pitch: 60 }],
+      },
+      { type: 'bar', milliseconds: 2000 },
+      {
+        type: 'event',
+        milliseconds: 2000,
+        duration: 1000,
+        midiPitches: [{ pitch: 62 }],
+      },
+      { type: 'bar', milliseconds: 4000 },
+    ];
+
+    const { timeline } = buildTimingDerivedData(baseVisualObj, timings);
+
+    expect(timeline.measureBoundaries).toEqual([2, 4]);
+  });
+
+  it('derives measure boundaries from barNumber increments when bar events are absent', () => {
+    const timings: TimingEvent[] = [
+      {
+        type: 'event',
+        milliseconds: 0,
+        duration: 500,
+        midiPitches: [{ pitch: 60 }],
+        barNumber: 0,
+      },
+      {
+        type: 'event',
+        milliseconds: 500,
+        duration: 500,
+        midiPitches: [{ pitch: 62 }],
+        barNumber: 1,
+      },
+      {
+        type: 'event',
+        milliseconds: 1500,
+        duration: 500,
+        midiPitches: [{ pitch: 64 }],
+        barNumber: 2,
+      },
+    ];
+
+    const { timeline } = buildTimingDerivedData(baseVisualObj, timings);
+
+    expect(timeline.measureBoundaries).toEqual([0.5, 1.5]);
   });
 });
 
@@ -154,5 +209,55 @@ C _D D _E | E F _G G |
       expect(entry.start).toBeCloseTo(expectedStart, 2);
       expect(entry.duration).toBeGreaterThan(0);
     });
+
+    expect(derived.timeline.measureBoundaries?.[0]).toBeCloseTo(2, 2);
+  });
+
+  it('respects pickup measures when deriving boundaries', () => {
+    const containerId = 'abc-pickup';
+    document.body.innerHTML = `<div id="${containerId}"></div>`;
+
+    const notation = `X:1
+T:test
+M:2/4
+L:1/16
+Q:1/4=60
+K:C
+abcd || e4- eedf- | f2
+`;
+
+    const visualObjs = abcjs.renderAbc(containerId, notation, {
+      responsive: 'resize',
+    });
+
+    expect(visualObjs).toHaveLength(1);
+
+    const [visualObj] = visualObjs;
+    type VisualObjWithOptionalAudio = VisualObjWithTimings & {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setUpAudio?: (options?: Record<string, any>) => unknown;
+    };
+
+    const visualObjWithAudio = visualObj as VisualObjWithOptionalAudio;
+    if (typeof visualObjWithAudio.setUpAudio === 'function') {
+      visualObjWithAudio.setUpAudio({ qpm: 60 });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const timingCallbacks = new (abcjs.TimingCallbacks as any)(visualObj, {});
+    const timings = (timingCallbacks as { noteTimings?: TimingEvent[] })
+      .noteTimings;
+
+    expect(timings).toBeDefined();
+
+    const derived = buildTimingDerivedData(
+      visualObj as VisualObjWithTimings,
+      (timings ?? []) as TimingEvent[]
+    );
+
+    const boundaries = (derived.timeline.measureBoundaries ?? []).map((value) =>
+      Number(value.toFixed(3))
+    );
+    expect(boundaries).toEqual([1, 3]);
   });
 });

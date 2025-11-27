@@ -76,6 +76,28 @@ describe('createOtamatoneRollNotesResult', () => {
     expect(result.baselineSecondsPerBeat).toBeCloseTo(DEFAULT_SECONDS_PER_BEAT);
     expect(result.playbackSecondsPerBeat).toBeCloseTo(DEFAULT_SECONDS_PER_BEAT);
   });
+
+  it('preserves measure boundaries from the active timeline', () => {
+    const baselineWithBars: NoteTimeline = {
+      notes: [makeNote(0, 1)],
+      totalDuration: 1,
+      secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
+      measureBoundaries: [1, 2, 3],
+    };
+    const overrideWithBars: NoteTimeline = {
+      notes: [makeNote(0, 2)],
+      totalDuration: 2,
+      secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
+      measureBoundaries: [2],
+    };
+
+    const result = createOtamatoneRollNotesResult(
+      baselineWithBars,
+      overrideWithBars
+    );
+
+    expect(result.measureBoundaries).toEqual([2]);
+  });
 });
 
 describe('normalizeTimelineToBaseline', () => {
@@ -86,6 +108,7 @@ describe('normalizeTimelineToBaseline', () => {
       notes: [makeNote(0, 1), makeNote(1, 1)],
       totalDuration: 2,
       secondsPerBeat: baselineSecondsPerBeat,
+      measureBoundaries: [2, 4],
     };
 
     const normalized = normalizeTimelineToBaseline(
@@ -97,6 +120,10 @@ describe('normalizeTimelineToBaseline', () => {
     expect(normalized.notes[1]?.startTime).toBeCloseTo(1);
     expect(normalized.notes[1]?.duration).toBeCloseTo(1);
     expect(normalized.totalDuration).toBeCloseTo(2);
+    expect(normalized.measureBoundaries).toEqual([2, 4]);
+    expect(normalized.measureBoundaries).not.toBe(
+      baselineTimeline.measureBoundaries
+    );
   });
 
   it('stretches note timings back to baseline when playback is slower', () => {
@@ -200,5 +227,6 @@ describe('buildBaselineTimelineFromNotation', () => {
     );
     expect(laterNote?.startTime).toBeCloseTo(1);
     expect(timeline.secondsPerBeat).toBeCloseTo(0.5);
+    expect(timeline.measureBoundaries).toEqual([]);
   });
 });

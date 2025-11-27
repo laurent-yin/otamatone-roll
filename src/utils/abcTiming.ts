@@ -22,6 +22,9 @@ export interface TimingEvent {
   endChar?: number | null;
   endCharArray?: Array<number | null>;
   midiPitches?: Array<TimingMidiPitch | null>;
+  barNumber?: number;
+  measureNumber?: number;
+  measureStart?: boolean;
 }
 
 const getSecondsPerWholeNote = (
@@ -66,7 +69,35 @@ export const buildTimingDerivedData = (
 ): { charMap: NoteCharTimeMap; timeline: NoteTimeline } => {
   const mapping: NoteCharTimeMap = {};
   const notes: Note[] = [];
+  const measureBoundaries: number[] = [];
 
+  const addMeasureBoundary = (timeSeconds?: number) => {
+    if (
+      typeof timeSeconds !== 'number' ||
+      !Number.isFinite(timeSeconds) ||
+      timeSeconds < 0
+    ) {
+      return;
+    }
+    const normalized = Number(timeSeconds.toFixed(6));
+    const last = measureBoundaries[measureBoundaries.length - 1];
+    if (typeof last === 'number' && Math.abs(last - normalized) < 1e-4) {
+      return;
+    }
+    measureBoundaries.push(normalized);
+  };
+
+  const meterFraction =
+    typeof visualObj?.getMeterFraction === 'function'
+      ? visualObj.getMeterFraction()
+      : undefined;
+  const beatsPerMeasure =
+    meterFraction &&
+    typeof meterFraction.num === 'number' &&
+    Number.isFinite(meterFraction.num) &&
+    meterFraction.num > 0
+      ? meterFraction.num
+      : undefined;
   const firstTimingWithMeasure = timings.find(
     (event) => typeof event?.millisecondsPerMeasure === 'number'
   );
@@ -76,8 +107,29 @@ export const buildTimingDerivedData = (
   );
   const fallbackSecondsPerBeat =
     secondsPerWholeNote > 0 ? secondsPerWholeNote / 4 : undefined;
+  const baselineSecondsPerBeat =
+    options?.secondsPerBeat ?? fallbackSecondsPerBeat;
+
+  const fallbackSecondsPerMeasure = (() => {
+    if (
+      typeof firstTimingWithMeasure?.millisecondsPerMeasure === 'number' &&
+      firstTimingWithMeasure.millisecondsPerMeasure > 0
+    ) {
+      return firstTimingWithMeasure.millisecondsPerMeasure / 1000;
+    }
+    if (
+      typeof beatsPerMeasure === 'number' &&
+      typeof baselineSecondsPerBeat === 'number' &&
+      beatsPerMeasure > 0 &&
+      baselineSecondsPerBeat > 0
+    ) {
+      return beatsPerMeasure * baselineSecondsPerBeat;
+    }
+    return undefined;
+  })();
 
   let maxEndSeconds = 0;
+  let lastMeasureIndex: number | null = null;
 
   timings.forEach((event) => {
     if (!event) return;
@@ -100,6 +152,46 @@ export const buildTimingDerivedData = (
           mapping[char] = timeSeconds;
         }
       });
+    }
+
+    if (
+      (event.type === 'bar' || event.type === 'measure') &&
+      typeof timeSeconds === 'number'
+    ) {
+      addMeasureBoundary(timeSeconds);
+    }
+
+    const eventMeasureIndex = (() => {
+      if (
+        typeof event.measureNumber === 'number' &&
+        Number.isFinite(event.measureNumber)
+      ) {
+        return event.measureNumber;
+      }
+      if (
+        typeof event.barNumber === 'number' &&
+        Number.isFinite(event.barNumber)
+      ) {
+        return event.barNumber;
+      }
+      return null;
+    })();
+
+    if (eventMeasureIndex !== null) {
+      const isNewMeasure =
+        lastMeasureIndex === null || eventMeasureIndex > lastMeasureIndex;
+      if (isNewMeasure) {
+        const hasMeasureStartFlag = event.measureStart === true;
+        const measureStartUnknown = typeof event.measureStart === 'undefined';
+        if (
+          typeof timeSeconds === 'number' &&
+          timeSeconds > 0 &&
+          (hasMeasureStartFlag || measureStartUnknown)
+        ) {
+          addMeasureBoundary(timeSeconds);
+        }
+        lastMeasureIndex = eventMeasureIndex;
+      }
     }
 
     if (event.type !== 'event' || !Array.isArray(event.midiPitches)) {
@@ -156,12 +248,39 @@ export const buildTimingDerivedData = (
     });
   });
 
+  if (
+    measureBoundaries.length === 0 &&
+    typeof fallbackSecondsPerMeasure === 'number' &&
+    fallbackSecondsPerMeasure > 0
+  ) {
+    for (
+      let boundary = fallbackSecondsPerMeasure;
+      boundary <= maxEndSeconds + 1e-6;
+      boundary += fallbackSecondsPerMeasure
+    ) {
+      addMeasureBoundary(boundary);
+    }
+  }
+
+  if (typeof console !== 'undefined' && typeof console.debug === 'function') {
+    const preview = measureBoundaries
+      .slice(0, 5)
+      .map((value) => Number(value.toFixed(4)));
+    console.debug('[abcTiming] timeline summary', {
+      totalDuration: Number(maxEndSeconds.toFixed(4)),
+      secondsPerBeat: baselineSecondsPerBeat,
+      measurePreview: preview,
+      measureCount: measureBoundaries.length,
+    });
+  }
+
   return {
     charMap: mapping,
     timeline: {
       notes,
       totalDuration: maxEndSeconds,
-      secondsPerBeat: options?.secondsPerBeat ?? fallbackSecondsPerBeat,
+      secondsPerBeat: baselineSecondsPerBeat,
+      measureBoundaries,
     },
   };
 };

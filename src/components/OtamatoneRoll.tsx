@@ -108,6 +108,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     totalDuration,
     baselineSecondsPerBeat,
     playbackSecondsPerBeat,
+    measureBoundaries = [] as number[],
   } = useOtamatoneRollNotes(notation, noteTimeline);
   const effectiveSecondsPerBeat =
     typeof baselineSecondsPerBeat === 'number' && baselineSecondsPerBeat > 0
@@ -137,6 +138,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
   const isPlayingRef = useRef(isPlaying);
   const activeNoteIndexRef = useRef<number | null>(null);
   const latestEventIdRef = useRef(0);
+  const measureBoundaryLogRef = useRef('');
 
   const minFrequency = useMemo(() => {
     if (
@@ -391,6 +393,59 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     };
 
     drawInstrument();
+    const drawMeasureMarkers = () => {
+      if (!measureBoundaries.length) {
+        return;
+      }
+      const barWidth = Math.max(1, 2 * widthScale);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(innerX, innerY, width - innerX, innerHeight);
+      ctx.clip();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+      let firstBoundarySeconds: number | null = null;
+      let firstBoundaryCenterX: number | null = null;
+      measureBoundaries.forEach((boundary) => {
+        if (typeof boundary !== 'number' || !Number.isFinite(boundary)) {
+          return;
+        }
+        const centerX =
+          playheadX + (boundary - effectiveTime) * pixelsPerSecond;
+        if (centerX + barWidth < innerX || centerX - barWidth > width) {
+          return;
+        }
+        ctx.fillRect(centerX - barWidth / 2, innerY, barWidth, innerHeight);
+        if (firstBoundarySeconds === null || firstBoundaryCenterX === null) {
+          firstBoundarySeconds = boundary;
+          firstBoundaryCenterX = centerX;
+        }
+      });
+      if (
+        typeof firstBoundarySeconds === 'number' &&
+        typeof firstBoundaryCenterX === 'number'
+      ) {
+        const boundarySecondsValue = firstBoundarySeconds as number;
+        const boundaryCenterXValue = firstBoundaryCenterX as number;
+        const summaryObject = {
+          boundarySeconds: Number(boundarySecondsValue.toFixed(4)),
+          canvasX: Number(boundaryCenterXValue.toFixed(2)),
+          effectiveTime: Number(effectiveTime.toFixed(3)),
+          pixelsPerSecond: Number(pixelsPerSecond.toFixed(2)),
+        };
+        const summary = JSON.stringify(summaryObject);
+        if (measureBoundaryLogRef.current !== summary) {
+          measureBoundaryLogRef.current = summary;
+          console.debug('[OtamatoneRoll] measure marker debug', {
+            ...summaryObject,
+            playheadX: Number(playheadX.toFixed(2)),
+            innerX: Number(innerX.toFixed(2)),
+          });
+        }
+      }
+      ctx.restore();
+    };
+
+    drawMeasureMarkers();
 
     const activeNoteIndex = activeNoteIndexRef.current;
 
@@ -466,7 +521,15 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     minFrequency,
     maxFrequency,
     effectiveSecondsPerBeat,
+    measureBoundaries,
   ]);
+
+  useEffect(() => {
+    console.debug('[OtamatoneRoll] measure boundaries updated', {
+      count: measureBoundaries.length,
+      values: measureBoundaries.slice(0, 8),
+    });
+  }, [measureBoundaries]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

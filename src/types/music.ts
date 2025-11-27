@@ -17,6 +17,7 @@ export interface NoteTimeline {
   notes: Note[];
   totalDuration: number;
   secondsPerBeat?: number;
+  measureBoundaries?: number[];
 }
 
 export interface NotePlaybackEvent {

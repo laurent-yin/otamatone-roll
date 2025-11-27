@@ -32,6 +32,7 @@ const createEmptyTimeline = (secondsPerBeat = DEFAULT_SECONDS_PER_BEAT) => ({
   notes: [],
   totalDuration: 0,
   secondsPerBeat,
+  measureBoundaries: [],
 });
 
 const extractSecondsPerBeat = (qpm?: number): number | undefined => {
@@ -142,6 +143,9 @@ export const normalizeTimelineToBaseline = (
     notes: timeline.notes.map((note) => ({ ...note })),
     totalDuration: timeline.totalDuration,
     secondsPerBeat: baselineSecondsPerBeat,
+    measureBoundaries: Array.isArray(timeline.measureBoundaries)
+      ? [...timeline.measureBoundaries]
+      : [],
   };
 };
 
