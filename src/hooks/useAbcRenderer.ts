@@ -1,15 +1,13 @@
-import { useEffect, useRef } from 'react';
-import abcjs from 'abcjs';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   NoteCharTimeMap,
   NotePlaybackEvent,
   NoteTimeline,
 } from '../types/music';
 import {
-  buildTimingDerivedData,
-  TimingEvent,
-  VisualObjWithTimings,
-} from '../utils/abcTiming';
+  AbcPlaybackController,
+  AbcPlaybackCallbacks,
+} from '../services/abcPlayback';
 
 interface UseAbcRendererProps {
   notation: string;
@@ -22,20 +20,6 @@ interface UseAbcRendererProps {
   onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
 }
 
-type TimingCallbacksWithEvents = {
-  noteTimings?: TimingEvent[];
-};
-
-type TimingCallbacksInternal = TimingCallbacksWithEvents & {
-  replaceTarget?: (target: VisualObjWithTimings) => void;
-  qpm?: number;
-};
-
-type VisualObjWithAudioSupport = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  setUpAudio?: (options?: Record<string, any>) => unknown;
-};
-
 export const useAbcRenderer = ({
   notation,
   containerId,
@@ -46,390 +30,136 @@ export const useAbcRenderer = ({
   onCharTimeMapChange,
   onNoteTimelineChange,
 }: UseAbcRendererProps) => {
-  const previousNotation = useRef<string>('');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const synthControlRef = useRef<any>(null);
-  const eventSequenceRef = useRef(0);
+  const previousRenderKey = useRef<string>('');
+  const controllerRef = useRef<AbcPlaybackController | null>(null);
+  const latestCallbacksRef = useRef<AbcPlaybackCallbacks>({});
+  const pendingFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    console.log('useAbcRenderer:', { notation, containerId, audioContainerId });
-
-    // Only re-render if notation actually changed
-    if (previousNotation.current === notation && notation !== '') return;
-
-    eventSequenceRef.current = 0;
-
-    const resetDerivedData = () => {
-      onCharTimeMapChange?.({});
-      onNoteTimelineChange?.(null);
-    };
-
-    const container = document.getElementById(containerId);
-    if (!container) {
-      console.error(`Container with id "${containerId}" not found`);
-      resetDerivedData();
-      return;
-    }
-
-    if (!notation || notation.trim() === '') {
-      console.warn('Empty notation provided');
-      resetDerivedData();
-      return;
-    }
-
-    resetDerivedData();
-
-    try {
-      const visualObj = abcjs.renderAbc(containerId, notation, {
-        responsive: 'resize',
-      });
-      previousNotation.current = notation;
-      console.log('ABC rendered successfully');
-
-      // Set up audio playback if audioContainerId is provided
-      if (audioContainerId && visualObj && visualObj[0]) {
-        const visualObjWithAudio = visualObj[0] as VisualObjWithAudioSupport;
-        if (typeof visualObjWithAudio.setUpAudio === 'function') {
-          try {
-            visualObjWithAudio.setUpAudio();
-          } catch (audioPrepError) {
-            console.warn(
-              'abcjs setUpAudio failed; timing data may be incomplete',
-              audioPrepError
-            );
-          }
-        }
-
-        const audioContainer = document.getElementById(audioContainerId);
-        if (audioContainer) {
-          // Clean up previous synth controller
-          if (synthControlRef.current) {
-            synthControlRef.current.destroy();
-          }
-
-          // Create new synth controller
-          const synthControl = new abcjs.synth.SynthController();
-          synthControl.load(audioContainer, null, {
-            displayLoop: true,
-            displayRestart: true,
-            displayPlay: true,
-            displayProgress: true,
-            displayWarp: true,
-          });
-
-          // Create TimingCallbacks for accurate playback synchronization
-          console.log('Creating TimingCallbacks');
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const timingCallbacks = new (abcjs.TimingCallbacks as any)(
-            visualObj[0],
-            {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              eventCallback: (event: any) => {
-                console.log('abcjs timing event', {
-                  ms: event?.milliseconds,
-                  startChar: event?.startChar,
-                  startCharArray: event?.startCharArray,
-                  midiPitches: event?.midiPitches,
-                  duration: event?.duration,
-                });
-                if (event && typeof event.milliseconds === 'number') {
-                  const currentTime = event.milliseconds / 1000;
-                  console.log('Setting currentTime to:', currentTime);
-                  onCurrentTimeChange?.(currentTime);
-
-                  if (onNoteEvent && Array.isArray(event.midiPitches)) {
-                    const midiPitches = event.midiPitches
-                      .map((pitch: unknown) => {
-                        if (typeof pitch === 'number') {
-                          return pitch;
-                        }
-                        if (
-                          pitch &&
-                          typeof pitch === 'object' &&
-                          typeof (pitch as { pitch?: number }).pitch ===
-                            'number'
-                        ) {
-                          return (pitch as { pitch: number }).pitch;
-                        }
-                        if (
-                          pitch &&
-                          typeof pitch === 'object' &&
-                          typeof (pitch as { midi?: number }).midi === 'number'
-                        ) {
-                          return (pitch as { midi: number }).midi;
-                        }
-                        return undefined;
-                      })
-                      .filter(
-                        (value: number | undefined): value is number =>
-                          typeof value === 'number'
-                      );
-
-                    if (midiPitches.length > 0) {
-                      eventSequenceRef.current += 1;
-                      const normalizedEvent: NotePlaybackEvent = {
-                        sequenceId: eventSequenceRef.current,
-                        timeSeconds: currentTime,
-                        durationSeconds:
-                          typeof event.duration === 'number'
-                            ? event.duration / 1000
-                            : undefined,
-                        midiPitches,
-                        startChar:
-                          typeof event.startChar === 'number'
-                            ? event.startChar
-                            : undefined,
-                        endChar:
-                          typeof event.endChar === 'number'
-                            ? event.endChar
-                            : undefined,
-                      };
-                      onNoteEvent(normalizedEvent);
-                    }
-                  }
-                }
-              },
-            }
-          );
-
-          const internalCallbacks = timingCallbacks as TimingCallbacksInternal;
-
-          const getSecondsPerBeat = () => {
-            const qpm = internalCallbacks.qpm;
-            if (typeof qpm === 'number' && qpm > 0) {
-              return 60 / qpm;
-            }
-            return undefined;
-          };
-
-          const emitTimingDerivedData = () => {
-            const tuneWithTimings = visualObj[0] as VisualObjWithTimings;
-            const callbacksWithEvents =
-              timingCallbacks as TimingCallbacksWithEvents;
-            const timings = callbacksWithEvents.noteTimings;
-            if (!Array.isArray(timings) || timings.length === 0) {
-              resetDerivedData();
-              return;
-            }
-
-            const derived = buildTimingDerivedData(
-              tuneWithTimings,
-              timings as TimingEvent[],
-              { secondsPerBeat: getSecondsPerBeat() }
-            );
-            console.log('[TimingDerived] timeline stats', {
-              events: timings.length,
-              notes: derived.timeline.notes.length,
-              totalDuration: derived.timeline.totalDuration,
-            });
-            onCharTimeMapChange?.(derived.charMap);
-            onNoteTimelineChange?.(derived.timeline);
-          };
-
-          const refreshTimingForTempoChange = () => {
-            try {
-              const controller = synthControl as unknown as {
-                currentTempo?: number;
-                percent?: number;
-                isStarted?: boolean;
-              };
-              const tuneWithTimings = visualObj[0] as VisualObjWithTimings;
-              if (typeof controller.currentTempo === 'number') {
-                internalCallbacks.qpm = controller.currentTempo;
-              }
-              internalCallbacks.replaceTarget?.(tuneWithTimings);
-              if (typeof controller.percent === 'number') {
-                const wasRunning = Boolean(controller.isStarted);
-                const currentPercent = controller.percent;
-                timingCallbacks.stop();
-                timingCallbacks.setProgress(currentPercent);
-                if (wasRunning) {
-                  timingCallbacks.start(currentPercent);
-                }
-              } else {
-                timingCallbacks.stop();
-              }
-              emitTimingDerivedData();
-            } catch (tempoError) {
-              console.warn(
-                'Unable to refresh timing after tempo change',
-                tempoError
-              );
-            }
-          };
-
-          const syncTimingWithSeek = () => {
-            const controller = synthControl as unknown as {
-              seek?: (percent: number, units?: number | string) => void;
-              restart?: () => void;
-            };
-
-            const originalSeek =
-              typeof controller.seek === 'function'
-                ? controller.seek.bind(synthControl)
-                : null;
-            if (originalSeek) {
-              controller.seek = (percent: number, units?: number | string) => {
-                console.log('[TimingState] syncing seek', { percent, units });
-                timingCallbacks.setProgress(percent, units);
-                return originalSeek(percent, units);
-              };
-            }
-
-            const originalRestart =
-              typeof controller.restart === 'function'
-                ? controller.restart.bind(synthControl)
-                : null;
-            if (originalRestart) {
-              controller.restart = () => {
-                console.log('[TimingState] syncing restart');
-                timingCallbacks.setProgress(0);
-                return originalRestart();
-              };
-            }
-          };
-
-          const syncTimingWithPlayback = () => {
-            const controller = synthControl as unknown as {
-              _play?: () => Promise<unknown>;
-              pause?: () => void;
-              finished?: () => void | string;
-              isStarted?: boolean;
-              percent?: number;
-            };
-
-            const originalPlay =
-              typeof controller._play === 'function'
-                ? controller._play.bind(synthControl)
-                : null;
-            if (originalPlay) {
-              controller._play = () =>
-                originalPlay().then((result) => {
-                  const isPlaying = Boolean(controller.isStarted);
-                  console.log('[TimingState] _play resolved', { isPlaying });
-                  if (isPlaying) {
-                    const offset =
-                      typeof controller.percent === 'number'
-                        ? controller.percent
-                        : undefined;
-                    timingCallbacks.start(offset);
-                  } else {
-                    timingCallbacks.pause();
-                    if (typeof controller.percent === 'number') {
-                      timingCallbacks.setProgress(controller.percent);
-                    }
-                  }
-                  onPlayingChange?.(isPlaying);
-                  return result;
-                });
-            }
-
-            const originalPause =
-              typeof controller.pause === 'function'
-                ? controller.pause.bind(synthControl)
-                : null;
-            if (originalPause) {
-              controller.pause = () => {
-                console.log('[TimingState] pause intercepted');
-                timingCallbacks.pause();
-                if (typeof controller.percent === 'number') {
-                  timingCallbacks.setProgress(controller.percent);
-                }
-                onPlayingChange?.(false);
-                return originalPause();
-              };
-            }
-
-            const originalFinished =
-              typeof controller.finished === 'function'
-                ? controller.finished.bind(synthControl)
-                : null;
-            if (originalFinished) {
-              controller.finished = () => {
-                console.log('[TimingState] finished intercepted');
-                const result = originalFinished();
-                if (result === 'continue') {
-                  timingCallbacks.setProgress(0);
-                  timingCallbacks.start(0);
-                  onPlayingChange?.(true);
-                } else {
-                  timingCallbacks.stop();
-                  onPlayingChange?.(false);
-                  onCurrentTimeChange?.(0);
-                }
-                return result;
-              };
-            }
-          };
-
-          const syncTimingWithTempoChanges = () => {
-            const controller = synthControl as unknown as {
-              setWarp?: (warp: number) => Promise<unknown>;
-              percent?: number;
-              isStarted?: boolean;
-            };
-            if (typeof controller.setWarp === 'function') {
-              const originalSetWarp = controller.setWarp.bind(synthControl);
-              controller.setWarp = (warp: number) =>
-                originalSetWarp(warp).then((result) => {
-                  refreshTimingForTempoChange();
-                  return result;
-                });
-            }
-          };
-
-          syncTimingWithSeek();
-          syncTimingWithPlayback();
-          syncTimingWithTempoChanges();
-
-          emitTimingDerivedData();
-
-          // Set the tune with timing callbacks
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          synthControl.setTune(visualObj[0], false, { timingCallbacks } as any);
-
-          const resetButton = audioContainer.querySelector(
-            '.abcjs-midi-reset'
-          ) as HTMLElement;
-          if (resetButton) {
-            resetButton.addEventListener('click', () => {
-              console.log('Reset button clicked, stopping timingCallbacks');
-              timingCallbacks.stop();
-              timingCallbacks.setProgress(0);
-              onCurrentTimeChange?.(0);
-              onPlayingChange?.(false);
-            });
-          }
-
-          synthControlRef.current = synthControl;
-          synthControlRef.current._timingCallbacks = timingCallbacks;
-
-          console.log('Audio controls loaded successfully');
-        }
-      }
-    } catch (error) {
-      console.error('Error rendering ABC notation:', error);
-      onCharTimeMapChange?.({});
-    }
-
-    return () => {
-      // Clean up synth controller on unmount
-      if (synthControlRef.current) {
-        if (synthControlRef.current._timingCallbacks) {
-          synthControlRef.current._timingCallbacks.stop();
-        }
-        synthControlRef.current.destroy();
-        synthControlRef.current = null;
-      }
+    console.log('[useAbcRenderer] Updating latest callbacks');
+    latestCallbacksRef.current = {
+      onCurrentTimeChange,
+      onPlayingChange,
+      onNoteEvent,
+      onCharTimeMapChange,
+      onNoteTimelineChange,
     };
   }, [
-    notation,
-    containerId,
-    audioContainerId,
     onCurrentTimeChange,
     onPlayingChange,
     onNoteEvent,
     onCharTimeMapChange,
     onNoteTimelineChange,
   ]);
+
+  const callbackProxy = useMemo<AbcPlaybackCallbacks>(() => {
+    return {
+      onCurrentTimeChange: (value) =>
+        latestCallbacksRef.current.onCurrentTimeChange?.(value),
+      onPlayingChange: (value) =>
+        latestCallbacksRef.current.onPlayingChange?.(value),
+      onNoteEvent: (event) => latestCallbacksRef.current.onNoteEvent?.(event),
+      onCharTimeMapChange: (map) =>
+        latestCallbacksRef.current.onCharTimeMapChange?.(map),
+      onNoteTimelineChange: (timeline) =>
+        latestCallbacksRef.current.onNoteTimelineChange?.(timeline),
+    };
+  }, []);
+
+  useEffect(() => {
+    const renderKey = `${containerId}::${audioContainerId ?? ''}::${notation}`;
+    if (
+      controllerRef.current &&
+      previousRenderKey.current === renderKey &&
+      notation !== ''
+    ) {
+      console.log('[useAbcRenderer] Skipping re-init; controller still valid');
+      return;
+    }
+
+    console.log('[useAbcRenderer] (Re)initializing renderer', {
+      renderKey,
+      hasController: Boolean(controllerRef.current),
+    });
+    previousRenderKey.current = renderKey;
+
+    controllerRef.current?.dispose();
+    controllerRef.current = null;
+
+    const resetDerivedData = () => {
+      latestCallbacksRef.current.onCharTimeMapChange?.({});
+      latestCallbacksRef.current.onNoteTimelineChange?.(null);
+    };
+
+    if (!notation || notation.trim() === '') {
+      console.warn('[useAbcRenderer] Empty notation; clearing state');
+      resetDerivedData();
+      return;
+    }
+
+    resetDerivedData();
+
+    let cancelled = false;
+
+    if (typeof document === 'undefined') {
+      console.warn('[useAbcRenderer] document is undefined; skipping render');
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const scheduleRetry = (callback: () => void) => {
+      if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+        pendingFrameRef.current = window.requestAnimationFrame(callback);
+      } else {
+        pendingFrameRef.current = window.setTimeout(callback, 16);
+      }
+    };
+
+    const attemptInitialization = () => {
+      if (cancelled) {
+        return;
+      }
+      if (!controllerRef.current) {
+        const container = document.getElementById(containerId);
+        if (!container) {
+          scheduleRetry(attemptInitialization);
+          return;
+        }
+        try {
+          controllerRef.current = new AbcPlaybackController({
+            notation,
+            containerId,
+            audioContainerId,
+            callbacks: callbackProxy,
+          });
+          console.log('[useAbcRenderer] Controller created.');
+        } catch (error) {
+          console.error('Failed to initialize ABC playback controller', error);
+          resetDerivedData();
+        }
+      }
+    };
+
+    attemptInitialization();
+
+    return () => {
+      cancelled = true;
+      if (pendingFrameRef.current !== null) {
+        cancelAnimationFrame(pendingFrameRef.current);
+        pendingFrameRef.current = null;
+      }
+      if (pendingFrameRef.current !== null) {
+        if (typeof window !== 'undefined' && window.cancelAnimationFrame) {
+          window.cancelAnimationFrame(pendingFrameRef.current);
+        } else {
+          clearTimeout(pendingFrameRef.current);
+        }
+        pendingFrameRef.current = null;
+      }
+      console.log('[useAbcRenderer] Disposing controller.');
+      controllerRef.current?.dispose();
+      controllerRef.current = null;
+    };
+  }, [notation, containerId, audioContainerId, callbackProxy]);
 };

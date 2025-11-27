@@ -18,12 +18,12 @@ import {
 } from '../utils/frequency';
 
 interface OtamatoneRollProps {
-  notation: string;
   currentTime?: number;
   isPlaying?: boolean;
   activeNoteEvent?: NotePlaybackEvent | null;
   noteCharTimes?: NoteCharTimeMap;
   noteTimeline?: NoteTimeline | null;
+  notation?: string;
   lowestNoteHz?: number;
   highestNoteHz?: number;
 }
@@ -92,12 +92,12 @@ const drawRoundedRect = (
 };
 
 export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
-  notation,
   currentTime = 0,
   isPlaying = false,
   activeNoteEvent = null,
   noteCharTimes,
   noteTimeline,
+  notation = '',
   lowestNoteHz,
   highestNoteHz,
 }) => {

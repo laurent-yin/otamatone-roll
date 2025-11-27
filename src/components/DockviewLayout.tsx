@@ -120,34 +120,34 @@ const PreviewPanel = (
 
 const OtamatoneRollPanel = (
   props: IDockviewPanelProps<{
-    notation: string;
     currentTime: number;
     isPlaying: boolean;
     activeNoteEvent?: NotePlaybackEvent | null;
     noteCharTimes?: NoteCharTimeMap;
     noteTimeline?: NoteTimeline | null;
+    notation?: string;
     lowestNoteHz?: number;
     highestNoteHz?: number;
   }>
 ) => {
-  const notation = props.params?.notation || '';
   const currentTime = props.params?.currentTime || 0;
   const isPlaying = props.params?.isPlaying || false;
   const activeNoteEvent = props.params?.activeNoteEvent;
   const noteCharTimes = props.params?.noteCharTimes;
   const noteTimeline = props.params?.noteTimeline;
+  const notation = props.params?.notation || '';
   const lowestNoteHz = props.params?.lowestNoteHz;
   const highestNoteHz = props.params?.highestNoteHz;
 
   return (
     <div className="otamatone-roll-panel">
       <OtamatoneRoll
-        notation={notation}
         currentTime={currentTime}
         isPlaying={isPlaying}
         activeNoteEvent={activeNoteEvent}
         noteCharTimes={noteCharTimes}
         noteTimeline={noteTimeline}
+        notation={notation}
         lowestNoteHz={lowestNoteHz}
         highestNoteHz={highestNoteHz}
       />
@@ -278,12 +278,12 @@ export const DockviewLayout = ({
         title: 'Otamatone Roll',
         position: { referencePanel: 'preview-panel', direction: 'right' },
         params: {
-          notation,
           currentTime,
           isPlaying,
           activeNoteEvent,
           noteCharTimes,
           noteTimeline,
+          notation,
           lowestNoteHz,
           highestNoteHz,
         },
@@ -349,10 +349,19 @@ export const DockviewLayout = ({
       layoutChangeDisposableRef.current = null;
       resizeObserverRef.current?.disconnect();
       resizeObserverRef.current = null;
-      dockviewInstance.dispose();
-      editorPanelRef.current = null;
-      previewPanelRef.current = null;
-      otamatonePanelRef.current = null;
+
+      const disposeDockview = () => {
+        dockviewInstance.dispose();
+        editorPanelRef.current = null;
+        previewPanelRef.current = null;
+        otamatonePanelRef.current = null;
+      };
+
+      if (typeof queueMicrotask === 'function') {
+        queueMicrotask(disposeDockview);
+      } else {
+        setTimeout(disposeDockview, 0);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
@@ -386,12 +395,12 @@ export const DockviewLayout = ({
 
     if (otamatoneRollPanel) {
       otamatoneRollPanel.api.updateParameters({
-        notation,
         currentTime,
         isPlaying,
         activeNoteEvent,
         noteCharTimes,
         noteTimeline,
+        notation,
         lowestNoteHz,
         highestNoteHz,
       });
