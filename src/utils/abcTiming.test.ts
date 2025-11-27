@@ -216,7 +216,9 @@ C _D D _E | E F _G G |
     });
 
     expect(derived.timeline.measureBoundaries).toEqual([2]);
-    expect(derived.timeline.beatBoundaries).toEqual([0.5, 1, 1.5, 2, 2.5, 3, 3.5]);
+    expect(derived.timeline.beatBoundaries).toEqual([
+      0.5, 1, 1.5, 2, 2.5, 3, 3.5,
+    ]);
   });
 
   it('respects pickup measures when deriving boundaries', () => {

@@ -420,12 +420,16 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
         if (options.filter && !options.filter(marker)) {
           return;
         }
-        const centerX =
-          playheadX + (marker - effectiveTime) * pixelsPerSecond;
+        const centerX = playheadX + (marker - effectiveTime) * pixelsPerSecond;
         if (centerX + markerWidth < innerX || centerX - markerWidth > width) {
           return;
         }
-        ctx.fillRect(centerX - markerWidth / 2, innerY, markerWidth, innerHeight);
+        ctx.fillRect(
+          centerX - markerWidth / 2,
+          innerY,
+          markerWidth,
+          innerHeight
+        );
         if (!firstVisible) {
           firstVisible = { position: marker, centerX };
         }
@@ -436,7 +440,10 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
       ctx.restore();
     };
 
-    const measureNearBeatEpsilon = Math.max(1e-3, effectiveSecondsPerBeat / 100);
+    const measureNearBeatEpsilon = Math.max(
+      1e-3,
+      effectiveSecondsPerBeat / 100
+    );
     const skipBeatsNearMeasures = (value: number) => {
       return measureBoundaries.some(
         (boundary) => Math.abs(boundary - value) < measureNearBeatEpsilon
