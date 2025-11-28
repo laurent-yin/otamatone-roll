@@ -11,14 +11,33 @@ import {
   DEFAULT_LOWEST_FREQUENCY,
 } from './utils/frequency';
 import { getCookie, setCookie } from './utils/cookies';
+import { buildTimelinePreviewImage } from './utils/timelinePreview';
 
 const AUDIO_CONTROLS_ID = 'abc-global-audio-controls';
 const LOWEST_NOTE_COOKIE = 'or-lowest-note-hz';
 const HIGHEST_NOTE_COOKIE = 'or-highest-note-hz';
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // one year
 const NOTATION_STORAGE_KEY = 'or-abc-notation';
+const FALLBACK_PROGRESS_HEIGHT_PX = 28;
 
 const isBrowser = () => typeof window !== 'undefined';
+
+const readProgressControlHeight = () => {
+  if (!isBrowser()) {
+    return FALLBACK_PROGRESS_HEIGHT_PX;
+  }
+  const root = document.documentElement;
+  if (!root) {
+    return FALLBACK_PROGRESS_HEIGHT_PX;
+  }
+  const computed = window.getComputedStyle(root);
+  const raw = computed.getPropertyValue('--or-progress-control-height');
+  const parsed = Number.parseFloat(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return FALLBACK_PROGRESS_HEIGHT_PX;
+  }
+  return parsed;
+};
 
 const readFrequencyCookie = (cookieName: string, fallback: number) => {
   const raw = getCookie(cookieName);
@@ -63,6 +82,7 @@ const App = () => {
   const [highestNoteHz, setHighestNoteHz] = useState<number>(() =>
     readFrequencyCookie(HIGHEST_NOTE_COOKIE, DEFAULT_HIGHEST_FREQUENCY)
   );
+  const progressPreviewHeight = useMemo(() => readProgressControlHeight(), []);
 
   const sanitizedLowestNoteHz = useMemo(() => {
     if (!Number.isFinite(lowestNoteHz) || lowestNoteHz <= 0) {
@@ -83,6 +103,20 @@ const App = () => {
 
     return Math.max(highestNoteHz, sanitizedLowestNoteHz + 1);
   }, [highestNoteHz, sanitizedLowestNoteHz]);
+
+  const timelinePreviewImage = useMemo(() => {
+    return buildTimelinePreviewImage(noteTimeline, {
+      width: 1200,
+      height: progressPreviewHeight,
+      minFrequency: sanitizedLowestNoteHz,
+      maxFrequency: sanitizedHighestNoteHz,
+    });
+  }, [
+    noteTimeline,
+    sanitizedLowestNoteHz,
+    sanitizedHighestNoteHz,
+    progressPreviewHeight,
+  ]);
 
   useEffect(() => {
     setCookie(LOWEST_NOTE_COOKIE, String(sanitizedLowestNoteHz), {
@@ -123,13 +157,70 @@ const App = () => {
     setter(parsed);
   };
 
+  useEffect(() => {
+    if (!isBrowser()) {
+      return;
+    }
+    const container = document.getElementById(AUDIO_CONTROLS_ID);
+    if (!container) {
+      return;
+    }
+
+    let progressEl: HTMLElement | null = null;
+    let observer: MutationObserver | null = null;
+
+    const clearPreview = () => {
+      if (progressEl) {
+        progressEl.style.removeProperty('--or-progress-preview-image');
+        progressEl.classList.remove('has-progress-preview');
+      }
+    };
+
+    const applyPreview = () => {
+      const candidate = container.querySelector<HTMLElement>(
+        '.abcjs-midi-progress-background'
+      );
+      if (progressEl !== candidate) {
+        clearPreview();
+        progressEl = candidate;
+      }
+      if (!progressEl) {
+        return;
+      }
+      if (timelinePreviewImage) {
+        progressEl.style.setProperty(
+          '--or-progress-preview-image',
+          `url(${timelinePreviewImage})`
+        );
+        progressEl.classList.add('has-progress-preview');
+      } else {
+        clearPreview();
+      }
+    };
+
+    applyPreview();
+
+    if (typeof MutationObserver !== 'undefined') {
+      observer = new MutationObserver(() => {
+        applyPreview();
+      });
+      observer.observe(container, { childList: true, subtree: true });
+    }
+
+    return () => {
+      observer?.disconnect();
+      clearPreview();
+      progressEl = null;
+    };
+  }, [timelinePreviewImage]);
+
   return (
     <div className="app">
       <header className="app-header">
         <div className="app-header-title">
           <h1>
             <span className="app-header-title-main">Otama-Karaoke!</span>
-            <span className="app-header-kaomoji">(*^o^*)</span>
+            <span className="app-header-kaomoji">ヾ(´〇`)ﾉ♬♪</span>
           </h1>
         </div>
         <div className="app-header-controls">
