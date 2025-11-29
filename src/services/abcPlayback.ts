@@ -323,6 +323,10 @@ export class AbcPlaybackController {
       );
       this.callbacks.onNoteTimelineChange?.(null);
     } else {
+      console.log(`${logPrefix} Calling onNoteTimelineChange with timeline`, {
+        hasCallback: !!this.callbacks.onNoteTimelineChange,
+        notesCount: derived.timeline.notes.length,
+      });
       this.callbacks.onNoteTimelineChange?.(derived.timeline);
     }
   }

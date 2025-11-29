@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "abcjs": "^6.5.2",
-    "dockview-core": "^4.11.0",
+    "dockview": "^4.11.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

@@ -38,7 +38,6 @@ export const useAbcRenderer = ({
   const pendingFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
-    console.log('[useAbcRenderer] Updating latest callbacks');
     latestCallbacksRef.current = {
       onCurrentTimeChange,
       onPlayingChange,
@@ -74,19 +73,21 @@ export const useAbcRenderer = ({
 
   useEffect(() => {
     const renderKey = `${containerId}::${audioContainerId ?? ''}::${notation}`;
+
+    // Don't initialize until we have at least the timeline callback
+    // This handles the case where dockview restores a panel before updateParameters is called
+    if (!onNoteTimelineChange) {
+      return;
+    }
+
     if (
       controllerRef.current &&
       previousRenderKey.current === renderKey &&
       notation !== ''
     ) {
-      console.log('[useAbcRenderer] Skipping re-init; controller still valid');
       return;
     }
 
-    console.log('[useAbcRenderer] (Re)initializing renderer', {
-      renderKey,
-      hasController: Boolean(controllerRef.current),
-    });
     previousRenderKey.current = renderKey;
 
     controllerRef.current?.dispose();
@@ -163,9 +164,14 @@ export const useAbcRenderer = ({
         }
         pendingFrameRef.current = null;
       }
-      console.log('[useAbcRenderer] Disposing controller.');
       controllerRef.current?.dispose();
       controllerRef.current = null;
     };
-  }, [notation, containerId, audioContainerId, callbackProxy]);
+  }, [
+    notation,
+    containerId,
+    audioContainerId,
+    callbackProxy,
+    onNoteTimelineChange,
+  ]);
 };
