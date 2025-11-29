@@ -1,30 +1,36 @@
+import type { TuneObject, NoteTimingEvent, MidiPitch } from 'abcjs';
 import { Note, NoteCharTimeMap, NoteTimeline } from '../types/music';
 
-export interface VisualObjWithTimings {
-  getMeterFraction?: () => { num?: number; den?: number };
-  millisecondsPerMeasure?: () => number;
-}
+/**
+ * Type alias for TuneObject - the visual object returned by abcjs.renderAbc()
+ * has methods for getting timing and meter information.
+ */
+export type VisualObjWithTimings = TuneObject;
 
-export interface TimingMidiPitch {
-  pitch?: number;
-  duration?: number;
-  volume?: number;
-  start?: number;
-}
+/**
+ * Type alias for MidiPitch from abcjs.
+ * @deprecated Use MidiPitch from 'abcjs' directly
+ */
+export type TimingMidiPitch = MidiPitch;
 
-export interface TimingEvent {
-  type?: string;
-  milliseconds?: number;
+/**
+ * Extended timing event type that includes additional event types
+ * observed at runtime but not in the official abcjs type definitions.
+ */
+export type TimingEventType = 'end' | 'event' | 'bar' | 'measure';
+
+/**
+ * Extended NoteTimingEvent with additional properties that exist at runtime
+ * but are not fully typed in abcjs. These properties are observed in actual
+ * abcjs timing callback events.
+ */
+export interface TimingEvent extends Omit<NoteTimingEvent, 'type'> {
+  /** Event type - extended to include bar/measure types */
+  type?: TimingEventType;
+  /** Duration in milliseconds (not always present in abcjs types) */
   duration?: number;
-  millisecondsPerMeasure?: number;
-  startChar?: number | null;
-  startCharArray?: Array<number | null>;
-  endChar?: number | null;
-  endCharArray?: Array<number | null>;
-  midiPitches?: Array<TimingMidiPitch | null>;
+  /** Bar number for bar events */
   barNumber?: number;
-  measureNumber?: number;
-  measureStart?: boolean;
 }
 
 const getSecondsPerWholeNote = (

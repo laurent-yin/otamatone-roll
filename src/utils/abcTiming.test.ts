@@ -5,30 +5,51 @@ import {
   VisualObjWithTimings,
 } from './abcTiming';
 
-describe('buildTimingDerivedData', () => {
-  const baseVisualObj: VisualObjWithTimings = {
+/**
+ * Helper to create partial mock objects for testing.
+ * Since we're testing the timing extraction logic, we only need
+ * the subset of properties that our code actually uses.
+ */
+const createMockVisualObj = (
+  overrides: Partial<{
+    getMeterFraction: () => { num: number; den: number };
+    millisecondsPerMeasure: () => number;
+  }> = {}
+): VisualObjWithTimings =>
+  ({
     getMeterFraction: () => ({ num: 4, den: 4 }),
     millisecondsPerMeasure: () => 2000,
-  };
+    ...overrides,
+  }) as VisualObjWithTimings;
+
+/**
+ * Helper to create partial timing events for testing.
+ */
+const createTimingEvent = (
+  overrides: Partial<TimingEvent>
+): TimingEvent => overrides as TimingEvent;
+
+describe('buildTimingDerivedData', () => {
+  const baseVisualObj = createMockVisualObj();
 
   it('creates char map entries and notes from timing events', () => {
     const timings: TimingEvent[] = [
-      {
+      createTimingEvent({
         type: 'event',
         milliseconds: 1000,
         duration: 500,
         startCharArray: [4, 5],
         endCharArray: [6, 7],
-        midiPitches: [{ pitch: 60, volume: 90 }, { pitch: 64 }],
-      },
-      {
+        midiPitches: [{ pitch: 60, volume: 90 }, { pitch: 64 }] as TimingEvent['midiPitches'],
+      }),
+      createTimingEvent({
         type: 'event',
         milliseconds: 1250,
         duration: 250,
         startChar: 8,
         endChar: 9,
-        midiPitches: [{ pitch: 67 }],
-      },
+        midiPitches: [{ pitch: 67 }] as TimingEvent['midiPitches'],
+      }),
     ];
 
     const { charMap, timeline } = buildTimingDerivedData(
@@ -67,11 +88,12 @@ describe('buildTimingDerivedData', () => {
   });
 
   it('derives timing from beat-based data when milliseconds are missing', () => {
-    const visualObj: VisualObjWithTimings = {
+    const visualObj = createMockVisualObj({
       getMeterFraction: () => ({ num: 3, den: 4 }),
-    };
+      millisecondsPerMeasure: undefined,
+    });
     const timings: TimingEvent[] = [
-      {
+      createTimingEvent({
         type: 'event',
         millisecondsPerMeasure: 1800,
         midiPitches: [
@@ -80,8 +102,8 @@ describe('buildTimingDerivedData', () => {
             start: 1.5,
             duration: 0.5,
           },
-        ],
-      },
+        ] as TimingEvent['midiPitches'],
+      }),
     ];
 
     const { charMap, timeline } = buildTimingDerivedData(visualObj, timings);
@@ -99,20 +121,20 @@ describe('buildTimingDerivedData', () => {
 
   it('records measure boundaries from bar events when provided', () => {
     const timings: TimingEvent[] = [
-      {
+      createTimingEvent({
         type: 'event',
         milliseconds: 0,
         duration: 1000,
-        midiPitches: [{ pitch: 60 }],
-      },
-      { type: 'bar', milliseconds: 2000 },
-      {
+        midiPitches: [{ pitch: 60 }] as TimingEvent['midiPitches'],
+      }),
+      createTimingEvent({ type: 'bar', milliseconds: 2000 }),
+      createTimingEvent({
         type: 'event',
         milliseconds: 2000,
         duration: 1000,
-        midiPitches: [{ pitch: 62 }],
-      },
-      { type: 'bar', milliseconds: 4000 },
+        midiPitches: [{ pitch: 62 }] as TimingEvent['midiPitches'],
+      }),
+      createTimingEvent({ type: 'bar', milliseconds: 4000 }),
     ];
 
     const { timeline } = buildTimingDerivedData(baseVisualObj, timings);
@@ -123,27 +145,27 @@ describe('buildTimingDerivedData', () => {
 
   it('derives measure boundaries from barNumber increments when bar events are absent', () => {
     const timings: TimingEvent[] = [
-      {
+      createTimingEvent({
         type: 'event',
         milliseconds: 0,
         duration: 500,
-        midiPitches: [{ pitch: 60 }],
+        midiPitches: [{ pitch: 60 }] as TimingEvent['midiPitches'],
         barNumber: 0,
-      },
-      {
+      }),
+      createTimingEvent({
         type: 'event',
         milliseconds: 500,
         duration: 500,
-        midiPitches: [{ pitch: 62 }],
+        midiPitches: [{ pitch: 62 }] as TimingEvent['midiPitches'],
         barNumber: 1,
-      },
-      {
+      }),
+      createTimingEvent({
         type: 'event',
         milliseconds: 1500,
         duration: 500,
-        midiPitches: [{ pitch: 64 }],
+        midiPitches: [{ pitch: 64 }] as TimingEvent['midiPitches'],
         barNumber: 2,
-      },
+      }),
     ];
 
     const { timeline } = buildTimingDerivedData(baseVisualObj, timings);

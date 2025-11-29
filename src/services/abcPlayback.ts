@@ -1,4 +1,5 @@
 import abcjs from 'abcjs';
+import type { TuneObject, SynthOptions, CursorControl } from 'abcjs';
 import {
   NoteCharTimeMap,
   NotePlaybackEvent,
@@ -28,21 +29,30 @@ export interface AbcPlaybackConfig {
   callbacks?: AbcPlaybackCallbacks;
 }
 
-type VisualObjWithAudioSupport = VisualObjWithTimings & {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  setUpAudio?: (options?: Record<string, any>) => unknown;
+/**
+ * Extended TuneObject that may have setUpAudio available.
+ * The setUpAudio method prepares timing data for playback.
+ */
+type VisualObjWithAudioSupport = TuneObject & {
+  setUpAudio?: (options?: SynthOptions) => unknown;
 };
 
+/**
+ * Internal interface for the SynthController with properties
+ * that exist at runtime but may not be in official types.
+ */
 type SynthControllerLike = {
   load: (
     container: HTMLElement,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    cursorControl?: any,
+    cursorControl?: CursorControl | null,
     options?: Record<string, unknown>
   ) => void;
   destroy?: () => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  setTune: (visualObj: any, userAction: boolean, options?: any) => void;
+  setTune: (
+    visualObj: TuneObject,
+    userAction: boolean,
+    options?: SynthOptions & { timingCallbacks?: TimingCallbacksInternal }
+  ) => unknown;
   _play?: () => Promise<unknown>;
   pause?: () => void;
   finished?: () => void | string;
@@ -54,11 +64,12 @@ type SynthControllerLike = {
   isStarted?: boolean;
 };
 
-type TimingCallbacksWithEvents = {
+/**
+ * Internal interface for TimingCallbacks instance with properties
+ * used for playback synchronization.
+ */
+type TimingCallbacksInternal = {
   noteTimings?: TimingEvent[];
-};
-
-type TimingCallbacksInternal = TimingCallbacksWithEvents & {
   replaceTarget?: (target: VisualObjWithTimings) => void;
   qpm?: number;
   setProgress?: (percent: number, units?: number | string) => void;
@@ -352,14 +363,9 @@ export class AbcPlaybackController {
     this.attachAudioSyncHandlers();
     this.attachResetButton(audioContainer);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const maybePromise = controller.setTune(
-      this.visualObj as unknown as Record<string, any>,
-      false,
-      {
-        timingCallbacks: this.timingCallbacks as unknown as Record<string, any>,
-      }
-    );
+    const maybePromise = controller.setTune(this.visualObj, false, {
+      timingCallbacks: this.timingCallbacks ?? undefined,
+    });
     console.log(`${logPrefix} setTune invoked.`);
 
     if (

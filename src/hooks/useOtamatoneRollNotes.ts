@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import abcjs from 'abcjs';
+import type { TuneObject, SynthOptions, AnimationOptions } from 'abcjs';
 import { NoteTimeline } from '../types/music';
 import {
   buildTimingDerivedData,
@@ -11,15 +12,21 @@ export type OtamatoneRollNotesResult = NoteTimeline & {
   baselineSecondsPerBeat: number;
   playbackSecondsPerBeat: number;
 };
+
+/**
+ * Extended TuneObject with setUpAudio method for preparing timing data.
+ */
+type VisualObjWithAudioSupport = TuneObject & {
+  setUpAudio?: (options?: SynthOptions) => void;
+};
+
+/**
+ * Instance type for TimingCallbacks with the properties we use.
+ */
 type TimingCallbacksInstance = {
   noteTimings?: TimingEvent[];
   replaceTarget?: (target: VisualObjWithTimings) => void;
   qpm?: number;
-};
-
-type VisualObjWithAudioSupport = VisualObjWithTimings & {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  setUpAudio?: (options?: Record<string, any>) => void;
 };
 const isPositiveNumber = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value > 0;
@@ -110,8 +117,8 @@ export const buildBaselineTimelineFromNotation = (
 
     const TimingCallbacksCtor = abcjs.TimingCallbacks as unknown as
       | (new (
-          target: VisualObjWithTimings,
-          options?: Record<string, unknown>
+          target: TuneObject,
+          options?: AnimationOptions
         ) => TimingCallbacksInstance)
       | undefined;
     if (typeof TimingCallbacksCtor !== 'function') {
