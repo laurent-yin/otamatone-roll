@@ -8,7 +8,7 @@ import { useAppStore } from '../store/appStore';
 export const AbcEditor = () => {
   const notation = useAppStore((state) => state.notation);
   const setNotation = useAppStore((state) => state.setNotation);
-  
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [localValue, setLocalValue] = useState(notation);
   const timeoutRef = useRef<number | undefined>(undefined);

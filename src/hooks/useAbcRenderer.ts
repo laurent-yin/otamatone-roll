@@ -162,5 +162,11 @@ export const useAbcRenderer = ({
     };
     // Note: callbackProxy is stable (uses refs internally), so we don't need it in deps
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notation, containerId, audioContainerId, setNoteCharTimes, setNoteTimeline]);
+  }, [
+    notation,
+    containerId,
+    audioContainerId,
+    setNoteCharTimes,
+    setNoteTimeline,
+  ]);
 };

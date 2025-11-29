@@ -264,9 +264,7 @@ const OtamatoneRollPanel = () => {
   );
 };
 
-export const DockviewLayout = ({
-  audioContainerId,
-}: DockviewLayoutProps) => {
+export const DockviewLayout = ({ audioContainerId }: DockviewLayoutProps) => {
   const [dockview, setDockview] = useState<DockviewApi | null>(null);
   const [panelVisibility, setPanelVisibility] = useState<PanelVisibility>(
     readStoredPanelVisibility

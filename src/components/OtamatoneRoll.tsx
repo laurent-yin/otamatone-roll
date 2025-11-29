@@ -85,14 +85,20 @@ export const OtamatoneRoll: React.FC = () => {
   const isPlaying = useAppStore((state) => state.isPlaying);
   const activeNoteEvent = useAppStore((state) => state.activeNoteEvent);
   const noteCharTimes = useAppStore((state) => state.noteCharTimes);
-  const currentSecondsPerBeat = useAppStore((state) => state.currentSecondsPerBeat);
+  const currentSecondsPerBeat = useAppStore(
+    (state) => state.currentSecondsPerBeat
+  );
   const noteTimeline = useAppStore((state) => state.noteTimeline);
-  const getSanitizedLowestNoteHz = useAppStore((state) => state.getSanitizedLowestNoteHz);
-  const getSanitizedHighestNoteHz = useAppStore((state) => state.getSanitizedHighestNoteHz);
+  const getSanitizedLowestNoteHz = useAppStore(
+    (state) => state.getSanitizedLowestNoteHz
+  );
+  const getSanitizedHighestNoteHz = useAppStore(
+    (state) => state.getSanitizedHighestNoteHz
+  );
 
   const lowestNoteHz = getSanitizedLowestNoteHz();
   const highestNoteHz = getSanitizedHighestNoteHz();
-  
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
 

@@ -32,8 +32,12 @@ const App = () => {
   const highestNoteHz = useAppStore((state) => state.highestNoteHz);
   const setLowestNoteHz = useAppStore((state) => state.setLowestNoteHz);
   const setHighestNoteHz = useAppStore((state) => state.setHighestNoteHz);
-  const getSanitizedLowestNoteHz = useAppStore((state) => state.getSanitizedLowestNoteHz);
-  const getSanitizedHighestNoteHz = useAppStore((state) => state.getSanitizedHighestNoteHz);
+  const getSanitizedLowestNoteHz = useAppStore(
+    (state) => state.getSanitizedLowestNoteHz
+  );
+  const getSanitizedHighestNoteHz = useAppStore(
+    (state) => state.getSanitizedHighestNoteHz
+  );
 
   const sanitizedLowestNoteHz = getSanitizedLowestNoteHz();
   const sanitizedHighestNoteHz = getSanitizedHighestNoteHz();
