@@ -25,9 +25,8 @@ const createMockVisualObj = (
 /**
  * Helper to create partial timing events for testing.
  */
-const createTimingEvent = (
-  overrides: Partial<TimingEvent>
-): TimingEvent => overrides as TimingEvent;
+const createTimingEvent = (overrides: Partial<TimingEvent>): TimingEvent =>
+  overrides as TimingEvent;
 
 describe('buildTimingDerivedData', () => {
   const baseVisualObj = createMockVisualObj();
@@ -40,7 +39,10 @@ describe('buildTimingDerivedData', () => {
         duration: 500,
         startCharArray: [4, 5],
         endCharArray: [6, 7],
-        midiPitches: [{ pitch: 60, volume: 90 }, { pitch: 64 }] as TimingEvent['midiPitches'],
+        midiPitches: [
+          { pitch: 60, volume: 90 },
+          { pitch: 64 },
+        ] as TimingEvent['midiPitches'],
       }),
       createTimingEvent({
         type: 'event',
