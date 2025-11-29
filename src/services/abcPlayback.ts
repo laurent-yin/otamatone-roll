@@ -20,6 +20,8 @@ export interface AbcPlaybackCallbacks {
   onNoteEvent?: (event: NotePlaybackEvent) => void;
   onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
   onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
+  /** Called when tempo changes (e.g., due to warp/speed control) */
+  onSecondsPerBeatChange?: (secondsPerBeat: number) => void;
 }
 
 export interface AbcPlaybackConfig {
@@ -306,8 +308,12 @@ export class AbcPlaybackController {
 
     console.log(`${logPrefix} Derived timeline`, {
       notes: derived.timeline.notes.length,
-      totalDuration: derived.timeline.totalDuration,
+      totalBeats: derived.timeline.totalBeats,
+      secondsPerBeat: derived.secondsPerBeat,
     });
+
+    // Emit the current tempo
+    this.callbacks.onSecondsPerBeatChange?.(derived.secondsPerBeat);
 
     this.callbacks.onCharTimeMapChange?.(derived.charMap);
 

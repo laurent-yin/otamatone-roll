@@ -29,8 +29,8 @@ export const buildTimelinePreviewImage = (
     !timeline ||
     !Array.isArray(timeline.notes) ||
     timeline.notes.length === 0 ||
-    typeof timeline.totalDuration !== 'number' ||
-    timeline.totalDuration <= 0
+    typeof timeline.totalBeats !== 'number' ||
+    timeline.totalBeats <= 0
   ) {
     return null;
   }
@@ -48,7 +48,7 @@ export const buildTimelinePreviewImage = (
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
 
-  const { notes, totalDuration } = timeline;
+  const { notes, totalBeats } = timeline;
   const measureBoundaries = Array.isArray(timeline.measureBoundaries)
     ? timeline.measureBoundaries
     : [];
@@ -84,8 +84,8 @@ export const buildTimelinePreviewImage = (
   const verticalPadding = height * 0.15;
   const usableHeight = Math.max(1, height - verticalPadding * 2);
 
-  const drawBoundarySet = (times: number[], opacity: number, dash = false) => {
-    if (times.length === 0) {
+  const drawBoundarySet = (beats: number[], opacity: number, dash = false) => {
+    if (beats.length === 0) {
       return;
     }
     ctx.save();
@@ -94,11 +94,11 @@ export const buildTimelinePreviewImage = (
     if (dash) {
       ctx.setLineDash([4, 4]);
     }
-    times.forEach((time) => {
-      if (typeof time !== 'number' || time <= 0) {
+    beats.forEach((beat) => {
+      if (typeof beat !== 'number' || beat <= 0) {
         return;
       }
-      const ratio = clamp(time / totalDuration, 0, 1);
+      const ratio = clamp(beat / totalBeats, 0, 1);
       const x = ratio * width;
       ctx.beginPath();
       ctx.moveTo(x, verticalPadding * 0.3);
@@ -127,9 +127,9 @@ export const buildTimelinePreviewImage = (
     if (!note) {
       return;
     }
-    const startRatio = clamp(note.startTime / totalDuration, 0, 1);
+    const startRatio = clamp(note.startBeat / totalBeats, 0, 1);
     const endRatio = clamp(
-      (note.startTime + Math.max(0, note.duration)) / totalDuration,
+      (note.startBeat + Math.max(0, note.durationBeats)) / totalBeats,
       startRatio + 0.001,
       1
     );

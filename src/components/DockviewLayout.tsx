@@ -31,6 +31,9 @@ interface DockviewLayoutProps {
   onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
   noteTimeline?: NoteTimeline | null;
   onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
+  /** Current playback tempo - may change with warp/speed controls */
+  currentSecondsPerBeat?: number;
+  onSecondsPerBeatChange?: (secondsPerBeat: number) => void;
   lowestNoteHz?: number;
   highestNoteHz?: number;
 }
@@ -89,6 +92,7 @@ const PreviewPanel = (
     onNoteEvent?: (event: NotePlaybackEvent) => void;
     onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
     onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
+    onSecondsPerBeatChange?: (secondsPerBeat: number) => void;
   }>
 ) => {
   const notation = props.params?.notation || '';
@@ -97,6 +101,7 @@ const PreviewPanel = (
   const onNoteEvent = props.params?.onNoteEvent;
   const onCharTimeMapChange = props.params?.onCharTimeMapChange;
   const onNoteTimelineChange = props.params?.onNoteTimelineChange;
+  const onSecondsPerBeatChange = props.params?.onSecondsPerBeatChange;
   const audioContainerId = props.params?.audioContainerId;
   const containerId = props.api?.id
     ? `abc-preview-${props.api.id}`
@@ -113,6 +118,7 @@ const PreviewPanel = (
         onNoteEvent={onNoteEvent}
         onCharTimeMapChange={onCharTimeMapChange}
         onNoteTimelineChange={onNoteTimelineChange}
+        onSecondsPerBeatChange={onSecondsPerBeatChange}
       />
     </div>
   );
@@ -124,7 +130,7 @@ const OtamatoneRollPanel = (
     isPlaying: boolean;
     activeNoteEvent?: NotePlaybackEvent | null;
     noteCharTimes?: NoteCharTimeMap;
-    noteTimeline?: NoteTimeline | null;
+    currentSecondsPerBeat?: number;
     notation?: string;
     lowestNoteHz?: number;
     highestNoteHz?: number;
@@ -134,7 +140,7 @@ const OtamatoneRollPanel = (
   const isPlaying = props.params?.isPlaying || false;
   const activeNoteEvent = props.params?.activeNoteEvent;
   const noteCharTimes = props.params?.noteCharTimes;
-  const noteTimeline = props.params?.noteTimeline;
+  const currentSecondsPerBeat = props.params?.currentSecondsPerBeat;
   const notation = props.params?.notation || '';
   const lowestNoteHz = props.params?.lowestNoteHz;
   const highestNoteHz = props.params?.highestNoteHz;
@@ -146,7 +152,7 @@ const OtamatoneRollPanel = (
         isPlaying={isPlaying}
         activeNoteEvent={activeNoteEvent}
         noteCharTimes={noteCharTimes}
-        noteTimeline={noteTimeline}
+        currentSecondsPerBeat={currentSecondsPerBeat}
         notation={notation}
         lowestNoteHz={lowestNoteHz}
         highestNoteHz={highestNoteHz}
@@ -169,6 +175,8 @@ export const DockviewLayout = ({
   onCharTimeMapChange,
   noteTimeline,
   onNoteTimelineChange,
+  currentSecondsPerBeat,
+  onSecondsPerBeatChange,
   lowestNoteHz,
   highestNoteHz,
 }: DockviewLayoutProps) => {
@@ -266,6 +274,7 @@ export const DockviewLayout = ({
           onNoteEvent,
           onCharTimeMapChange,
           onNoteTimelineChange,
+          onSecondsPerBeatChange,
           audioContainerId,
         },
         initialWidth: 520,
@@ -282,7 +291,7 @@ export const DockviewLayout = ({
           isPlaying,
           activeNoteEvent,
           noteCharTimes,
-          noteTimeline,
+          currentSecondsPerBeat,
           notation,
           lowestNoteHz,
           highestNoteHz,
@@ -389,6 +398,7 @@ export const DockviewLayout = ({
         onNoteEvent,
         onCharTimeMapChange,
         onNoteTimelineChange,
+        onSecondsPerBeatChange,
         audioContainerId,
       });
     }
@@ -399,7 +409,7 @@ export const DockviewLayout = ({
         isPlaying,
         activeNoteEvent,
         noteCharTimes,
-        noteTimeline,
+        currentSecondsPerBeat,
         notation,
         lowestNoteHz,
         highestNoteHz,
@@ -419,6 +429,8 @@ export const DockviewLayout = ({
     onCharTimeMapChange,
     noteTimeline,
     onNoteTimelineChange,
+    currentSecondsPerBeat,
+    onSecondsPerBeatChange,
     audioContainerId,
     lowestNoteHz,
     highestNoteHz,

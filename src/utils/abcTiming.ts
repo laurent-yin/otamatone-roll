@@ -33,123 +33,141 @@ export interface TimingEvent extends Omit<NoteTimingEvent, 'type'> {
   barNumber?: number;
 }
 
-const getSecondsPerWholeNote = (
-  visualObj: VisualObjWithTimings,
-  fallbackMsPerMeasure?: number
-): number => {
+/** Default beats per quarter note (standard music notation) */
+const BEATS_PER_QUARTER_NOTE = 1;
+/** Quarter notes per whole note */
+const QUARTER_NOTES_PER_WHOLE = 4;
+/** Default BPM when not specified */
+const DEFAULT_BPM = 120;
+/** Default seconds per beat at 120 BPM */
+export const DEFAULT_SECONDS_PER_BEAT = 60 / DEFAULT_BPM;
+
+/**
+ * Result of building timing data from ABC notation.
+ * Contains both the beat-based timeline (invariant) and tempo info for playback.
+ */
+export interface TimingDerivedData {
+  /** Map from character position to time in seconds (for cursor sync) */
+  charMap: NoteCharTimeMap;
+  /** The musical timeline in beats (invariant to tempo) */
+  timeline: NoteTimeline;
+  /** Baseline tempo from the ABC notation */
+  secondsPerBeat: number;
+}
+
+/**
+ * Extract meter information from the visual object.
+ */
+const getMeterInfo = (visualObj: VisualObjWithTimings) => {
   const meter =
     typeof visualObj?.getMeterFraction === 'function'
       ? visualObj.getMeterFraction()
       : undefined;
-  const meterSize =
-    meter && typeof meter.num === 'number' && typeof meter.den === 'number'
-      ? meter.den !== 0
-        ? meter.num / meter.den
-        : 0
-      : 1;
 
+  const beatsPerMeasure =
+    meter &&
+    typeof meter.num === 'number' &&
+    Number.isFinite(meter.num) &&
+    meter.num > 0
+      ? meter.num
+      : 4; // default to 4/4
+
+  const beatUnit =
+    meter &&
+    typeof meter.den === 'number' &&
+    Number.isFinite(meter.den) &&
+    meter.den > 0
+      ? meter.den
+      : 4; // default quarter note
+
+  return { beatsPerMeasure, beatUnit };
+};
+
+/**
+ * Calculate seconds per beat from the visual object or timing events.
+ */
+const getSecondsPerBeat = (
+  visualObj: VisualObjWithTimings,
+  timings: TimingEvent[]
+): number => {
+  const { beatsPerMeasure } = getMeterInfo(visualObj);
+
+  // Try to get milliseconds per measure from the visual object
   const msPerMeasureFromMethod =
     typeof visualObj?.millisecondsPerMeasure === 'function'
       ? visualObj.millisecondsPerMeasure()
       : undefined;
-  const msPerMeasure =
-    typeof msPerMeasureFromMethod === 'number'
-      ? msPerMeasureFromMethod
-      : fallbackMsPerMeasure;
 
   if (
-    typeof msPerMeasure !== 'number' ||
-    !Number.isFinite(msPerMeasure) ||
-    meterSize <= 0
+    typeof msPerMeasureFromMethod === 'number' &&
+    Number.isFinite(msPerMeasureFromMethod) &&
+    msPerMeasureFromMethod > 0
   ) {
-    return 0;
+    return msPerMeasureFromMethod / 1000 / beatsPerMeasure;
   }
 
-  return msPerMeasure / 1000 / meterSize;
+  // Fallback: try to get from first timing event
+  const firstTimingWithMeasure = timings.find(
+    (event) =>
+      typeof event?.millisecondsPerMeasure === 'number' &&
+      event.millisecondsPerMeasure > 0
+  );
+
+  if (firstTimingWithMeasure?.millisecondsPerMeasure) {
+    return (
+      firstTimingWithMeasure.millisecondsPerMeasure / 1000 / beatsPerMeasure
+    );
+  }
+
+  return DEFAULT_SECONDS_PER_BEAT;
 };
 
+/**
+ * Build beat-based timeline from ABC timing events.
+ * The resulting timeline is invariant to tempo changes.
+ */
 export const buildTimingDerivedData = (
   visualObj: VisualObjWithTimings,
   timings: TimingEvent[],
   options?: { secondsPerBeat?: number }
-): { charMap: NoteCharTimeMap; timeline: NoteTimeline } => {
+): TimingDerivedData => {
   const mapping: NoteCharTimeMap = {};
   const notes: Note[] = [];
   const measureBoundaries: number[] = [];
-  const beatBoundaries: number[] = [];
 
-  const addBoundary = (collection: number[], timeSeconds?: number) => {
-    if (
-      typeof timeSeconds !== 'number' ||
-      !Number.isFinite(timeSeconds) ||
-      timeSeconds < 0
-    ) {
+  // Get tempo and meter info
+  const secondsPerBeat =
+    options?.secondsPerBeat ?? getSecondsPerBeat(visualObj, timings);
+  const { beatsPerMeasure } = getMeterInfo(visualObj);
+
+  // Helper to add unique boundaries
+  const addBoundary = (collection: number[], beat?: number) => {
+    if (typeof beat !== 'number' || !Number.isFinite(beat) || beat < 0) {
       return;
     }
-    const normalized = Number(timeSeconds.toFixed(6));
+    const normalized = Number(beat.toFixed(6));
     const last = collection[collection.length - 1];
     if (typeof last === 'number' && Math.abs(last - normalized) < 1e-4) {
       return;
     }
     collection.push(normalized);
   };
-  const addMeasureBoundary = (timeSeconds?: number) =>
-    addBoundary(measureBoundaries, timeSeconds);
-  const addBeatBoundary = (timeSeconds?: number) =>
-    addBoundary(beatBoundaries, timeSeconds);
 
-  const meterFraction =
-    typeof visualObj?.getMeterFraction === 'function'
-      ? visualObj.getMeterFraction()
-      : undefined;
-  const beatsPerMeasure =
-    meterFraction &&
-    typeof meterFraction.num === 'number' &&
-    Number.isFinite(meterFraction.num) &&
-    meterFraction.num > 0
-      ? meterFraction.num
-      : undefined;
-  const firstTimingWithMeasure = timings.find(
-    (event) => typeof event?.millisecondsPerMeasure === 'number'
-  );
-  const secondsPerWholeNote = getSecondsPerWholeNote(
-    visualObj,
-    firstTimingWithMeasure?.millisecondsPerMeasure
-  );
-  const fallbackSecondsPerBeat =
-    secondsPerWholeNote > 0 ? secondsPerWholeNote / 4 : undefined;
-  const baselineSecondsPerBeat =
-    options?.secondsPerBeat ?? fallbackSecondsPerBeat;
-
-  const fallbackSecondsPerMeasure = (() => {
-    if (
-      typeof firstTimingWithMeasure?.millisecondsPerMeasure === 'number' &&
-      firstTimingWithMeasure.millisecondsPerMeasure > 0
-    ) {
-      return firstTimingWithMeasure.millisecondsPerMeasure / 1000;
-    }
-    if (
-      typeof beatsPerMeasure === 'number' &&
-      typeof baselineSecondsPerBeat === 'number' &&
-      beatsPerMeasure > 0 &&
-      baselineSecondsPerBeat > 0
-    ) {
-      return beatsPerMeasure * baselineSecondsPerBeat;
-    }
-    return undefined;
-  })();
-
-  let maxEndSeconds = 0;
+  let maxEndBeats = 0;
   let lastMeasureIndex: number | null = null;
 
   timings.forEach((event) => {
     if (!event) return;
-    const timeSeconds =
-      typeof event.milliseconds === 'number'
-        ? event.milliseconds / 1000
+
+    // Convert milliseconds to beats
+    const timeBeats =
+      typeof event.milliseconds === 'number' && secondsPerBeat > 0
+        ? event.milliseconds / 1000 / secondsPerBeat
         : undefined;
 
-    if (typeof timeSeconds === 'number') {
+    // Build char map (still in seconds for cursor sync with abcjs)
+    if (typeof event.milliseconds === 'number') {
+      const timeSeconds = event.milliseconds / 1000;
       const chars = Array.isArray(event.startCharArray)
         ? event.startCharArray
         : [event.startChar];
@@ -165,13 +183,15 @@ export const buildTimingDerivedData = (
       });
     }
 
+    // Handle bar/measure events
     if (
       (event.type === 'bar' || event.type === 'measure') &&
-      typeof timeSeconds === 'number'
+      typeof timeBeats === 'number'
     ) {
-      addMeasureBoundary(timeSeconds);
+      addBoundary(measureBoundaries, timeBeats);
     }
 
+    // Handle measure number changes
     const eventMeasureIndex = (() => {
       if (
         typeof event.measureNumber === 'number' &&
@@ -195,42 +215,52 @@ export const buildTimingDerivedData = (
         const hasMeasureStartFlag = event.measureStart === true;
         const measureStartUnknown = typeof event.measureStart === 'undefined';
         if (
-          typeof timeSeconds === 'number' &&
-          timeSeconds > 0 &&
+          typeof timeBeats === 'number' &&
+          timeBeats > 0 &&
           (hasMeasureStartFlag || measureStartUnknown)
         ) {
-          addMeasureBoundary(timeSeconds);
+          addBoundary(measureBoundaries, timeBeats);
         }
         lastMeasureIndex = eventMeasureIndex;
       }
     }
 
+    // Process note events
     if (event.type !== 'event' || !Array.isArray(event.midiPitches)) {
       return;
     }
 
     event.midiPitches.forEach((pitchInfo, index) => {
       if (!pitchInfo || typeof pitchInfo.pitch !== 'number') return;
-      const startSeconds =
-        typeof timeSeconds === 'number'
-          ? timeSeconds
-          : typeof pitchInfo.start === 'number' && secondsPerWholeNote > 0
-            ? pitchInfo.start * secondsPerWholeNote
-            : 0;
 
-      const durationSeconds =
-        typeof event.duration === 'number'
-          ? event.duration / 1000
-          : typeof pitchInfo.duration === 'number' && secondsPerWholeNote > 0
-            ? pitchInfo.duration * secondsPerWholeNote
-            : 0;
+      // Get start beat - prefer event milliseconds, fall back to pitchInfo.start (in whole notes)
+      let startBeat: number;
+      if (typeof timeBeats === 'number') {
+        startBeat = timeBeats;
+      } else if (typeof pitchInfo.start === 'number') {
+        // pitchInfo.start is in whole notes, convert to quarter note beats
+        startBeat =
+          pitchInfo.start * QUARTER_NOTES_PER_WHOLE * BEATS_PER_QUARTER_NOTE;
+      } else {
+        startBeat = 0;
+      }
 
-      const effectiveEnd = Math.max(
-        startSeconds + durationSeconds,
-        startSeconds
-      );
-      if (effectiveEnd > maxEndSeconds) {
-        maxEndSeconds = effectiveEnd;
+      // Get duration in beats
+      let durationBeats: number;
+      if (typeof event.duration === 'number' && secondsPerBeat > 0) {
+        // event.duration is in milliseconds
+        durationBeats = event.duration / 1000 / secondsPerBeat;
+      } else if (typeof pitchInfo.duration === 'number') {
+        // pitchInfo.duration is in whole notes
+        durationBeats =
+          pitchInfo.duration * QUARTER_NOTES_PER_WHOLE * BEATS_PER_QUARTER_NOTE;
+      } else {
+        durationBeats = 0;
+      }
+
+      const effectiveEnd = Math.max(startBeat + durationBeats, startBeat);
+      if (effectiveEnd > maxEndBeats) {
+        maxEndBeats = effectiveEnd;
       }
 
       const startChar = Array.isArray(event.startCharArray)
@@ -242,8 +272,8 @@ export const buildTimingDerivedData = (
 
       notes.push({
         pitch: pitchInfo.pitch,
-        startTime: startSeconds,
-        duration: durationSeconds,
+        startBeat,
+        durationBeats,
         velocity: typeof pitchInfo.volume === 'number' ? pitchInfo.volume : 80,
         source: {
           startChar:
@@ -259,46 +289,33 @@ export const buildTimingDerivedData = (
     });
   });
 
-  if (
-    measureBoundaries.length === 0 &&
-    typeof fallbackSecondsPerMeasure === 'number' &&
-    fallbackSecondsPerMeasure > 0
-  ) {
+  // Generate fallback measure boundaries if none were found
+  if (measureBoundaries.length === 0 && beatsPerMeasure > 0) {
     for (
-      let boundary = fallbackSecondsPerMeasure;
-      boundary <= maxEndSeconds + 1e-6;
-      boundary += fallbackSecondsPerMeasure
+      let boundary = beatsPerMeasure;
+      boundary <= maxEndBeats + 1e-6;
+      boundary += beatsPerMeasure
     ) {
-      addMeasureBoundary(boundary);
+      addBoundary(measureBoundaries, boundary);
     }
   }
 
-  if (
-    typeof baselineSecondsPerBeat === 'number' &&
-    baselineSecondsPerBeat > 0
-  ) {
-    for (
-      let beatTime = baselineSecondsPerBeat;
-      beatTime < maxEndSeconds - 1e-4;
-      beatTime += baselineSecondsPerBeat
-    ) {
-      addBeatBoundary(beatTime);
-    }
+  // Generate beat boundaries (simple sequence: 1, 2, 3, ...)
+  const beatBoundaries: number[] = [];
+  for (let beat = 1; beat < maxEndBeats - 1e-4; beat += 1) {
+    beatBoundaries.push(beat);
   }
 
   if (typeof console !== 'undefined' && typeof console.debug === 'function') {
-    const preview = measureBoundaries
-      .slice(0, 5)
-      .map((value) => Number(value.toFixed(4)));
-    console.debug('[abcTiming] timeline summary', {
-      totalDuration: Number(maxEndSeconds.toFixed(4)),
-      secondsPerBeat: baselineSecondsPerBeat,
-      measurePreview: preview,
-      measureCount: measureBoundaries.length,
-      beatPreview: beatBoundaries
+    console.debug('[abcTiming] timeline summary (beats)', {
+      totalBeats: Number(maxEndBeats.toFixed(4)),
+      secondsPerBeat: Number(secondsPerBeat.toFixed(4)),
+      beatsPerMeasure,
+      measurePreview: measureBoundaries
         .slice(0, 5)
-        .map((value) => Number(value.toFixed(4))),
-      beatCount: beatBoundaries.length,
+        .map((v) => Number(v.toFixed(4))),
+      measureCount: measureBoundaries.length,
+      noteCount: notes.length,
     });
   }
 
@@ -306,10 +323,11 @@ export const buildTimingDerivedData = (
     charMap: mapping,
     timeline: {
       notes,
-      totalDuration: maxEndSeconds,
-      secondsPerBeat: baselineSecondsPerBeat,
+      totalBeats: maxEndBeats,
+      beatsPerMeasure,
       measureBoundaries,
       beatBoundaries,
     },
+    secondsPerBeat,
   };
 };

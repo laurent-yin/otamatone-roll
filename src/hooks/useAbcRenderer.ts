@@ -18,6 +18,7 @@ interface UseAbcRendererProps {
   onNoteEvent?: (event: NotePlaybackEvent) => void;
   onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
   onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
+  onSecondsPerBeatChange?: (secondsPerBeat: number) => void;
 }
 
 export const useAbcRenderer = ({
@@ -29,6 +30,7 @@ export const useAbcRenderer = ({
   onNoteEvent,
   onCharTimeMapChange,
   onNoteTimelineChange,
+  onSecondsPerBeatChange,
 }: UseAbcRendererProps) => {
   const previousRenderKey = useRef<string>('');
   const controllerRef = useRef<AbcPlaybackController | null>(null);
@@ -43,6 +45,7 @@ export const useAbcRenderer = ({
       onNoteEvent,
       onCharTimeMapChange,
       onNoteTimelineChange,
+      onSecondsPerBeatChange,
     };
   }, [
     onCurrentTimeChange,
@@ -50,6 +53,7 @@ export const useAbcRenderer = ({
     onNoteEvent,
     onCharTimeMapChange,
     onNoteTimelineChange,
+    onSecondsPerBeatChange,
   ]);
 
   const callbackProxy = useMemo<AbcPlaybackCallbacks>(() => {
@@ -63,6 +67,8 @@ export const useAbcRenderer = ({
         latestCallbacksRef.current.onCharTimeMapChange?.(map),
       onNoteTimelineChange: (timeline) =>
         latestCallbacksRef.current.onNoteTimelineChange?.(timeline),
+      onSecondsPerBeatChange: (secondsPerBeat) =>
+        latestCallbacksRef.current.onSecondsPerBeatChange?.(secondsPerBeat),
     };
   }, []);
 

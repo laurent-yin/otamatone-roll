@@ -76,6 +76,9 @@ const App = () => {
     useState<NotePlaybackEvent | null>(null);
   const [noteCharTimes, setNoteCharTimes] = useState<NoteCharTimeMap>({});
   const [noteTimeline, setNoteTimeline] = useState<NoteTimeline | null>(null);
+  const [currentSecondsPerBeat, setCurrentSecondsPerBeat] = useState<
+    number | undefined
+  >();
   const [lowestNoteHz, setLowestNoteHz] = useState<number>(() =>
     readFrequencyCookie(LOWEST_NOTE_COOKIE, DEFAULT_LOWEST_FREQUENCY)
   );
@@ -296,6 +299,8 @@ const App = () => {
           onCharTimeMapChange={setNoteCharTimes}
           noteTimeline={noteTimeline}
           onNoteTimelineChange={setNoteTimeline}
+          currentSecondsPerBeat={currentSecondsPerBeat}
+          onSecondsPerBeatChange={setCurrentSecondsPerBeat}
           lowestNoteHz={sanitizedLowestNoteHz}
           highestNoteHz={sanitizedHighestNoteHz}
         />

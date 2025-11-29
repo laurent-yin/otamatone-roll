@@ -3,11 +3,7 @@ import {
   useOtamatoneRollNotes,
   DEFAULT_SECONDS_PER_BEAT,
 } from '../hooks/useOtamatoneRollNotes';
-import {
-  NoteCharTimeMap,
-  NotePlaybackEvent,
-  NoteTimeline,
-} from '../types/music';
+import { NoteCharTimeMap, NotePlaybackEvent } from '../types/music';
 import {
   DEFAULT_HIGHEST_MIDI,
   DEFAULT_LOWEST_MIDI,
@@ -18,11 +14,13 @@ import {
 } from '../utils/frequency';
 
 interface OtamatoneRollProps {
+  /** Current playback time in seconds */
   currentTime?: number;
   isPlaying?: boolean;
   activeNoteEvent?: NotePlaybackEvent | null;
   noteCharTimes?: NoteCharTimeMap;
-  noteTimeline?: NoteTimeline | null;
+  /** Current playback tempo - may change with warp/speed controls */
+  currentSecondsPerBeat?: number;
   notation?: string;
   lowestNoteHz?: number;
   highestNoteHz?: number;
@@ -43,9 +41,9 @@ const NOTE_LABEL_MARGIN = 14;
 const NOTE_LABEL_GAP = 12;
 const MIN_PLAYHEAD_FRACTION = 0.12;
 const BEATS_PER_VERTICAL_SPAN = 4;
-const FALLBACK_PIXELS_PER_SECOND = 100;
-const NOTE_THICKNESS_RATIO = 0.7; // portion of inner width used for note thickness
-const CHORD_ALIGNMENT_TOLERANCE = 1e-3; // seconds; treat chord starts within this as simultaneous
+const FALLBACK_PIXELS_PER_BEAT = 50;
+const NOTE_THICKNESS_RATIO = 0.7;
+const CHORD_ALIGNMENT_TOLERANCE_BEATS = 0.01; // in beats
 
 const getTimestamp = () =>
   typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -97,45 +95,44 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
   isPlaying = false,
   activeNoteEvent = null,
   noteCharTimes,
-  noteTimeline,
+  currentSecondsPerBeat,
   notation = '',
   lowestNoteHz,
   highestNoteHz,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
+
+  // Get the beat-based timeline (invariant to tempo changes)
   const {
     notes,
-    totalDuration,
-    baselineSecondsPerBeat,
-    playbackSecondsPerBeat,
+    totalBeats,
+    secondsPerBeat: baselineSecondsPerBeat,
     measureBoundaries = [] as number[],
     beatBoundaries = [] as number[],
-  } = useOtamatoneRollNotes(notation, noteTimeline);
+  } = useOtamatoneRollNotes(notation);
+
+  // Use current playback tempo if provided, otherwise use baseline
   const effectiveSecondsPerBeat =
-    typeof baselineSecondsPerBeat === 'number' && baselineSecondsPerBeat > 0
-      ? baselineSecondsPerBeat
-      : DEFAULT_SECONDS_PER_BEAT;
-  const warpRatio = useMemo(() => {
-    if (
-      typeof playbackSecondsPerBeat === 'number' &&
-      playbackSecondsPerBeat > 0
-    ) {
-      return playbackSecondsPerBeat / effectiveSecondsPerBeat;
-    }
-    return 1;
-  }, [playbackSecondsPerBeat, effectiveSecondsPerBeat]);
-  const warpSafe = Number.isFinite(warpRatio) && warpRatio > 0 ? warpRatio : 1;
-  const convertPlaybackTime = useCallback(
-    (time?: number) => {
-      if (typeof time !== 'number' || !Number.isFinite(time)) {
+    typeof currentSecondsPerBeat === 'number' && currentSecondsPerBeat > 0
+      ? currentSecondsPerBeat
+      : typeof baselineSecondsPerBeat === 'number' && baselineSecondsPerBeat > 0
+        ? baselineSecondsPerBeat
+        : DEFAULT_SECONDS_PER_BEAT;
+
+  // Convert seconds to beats using current tempo
+  const secondsToBeats = useCallback(
+    (seconds?: number): number | undefined => {
+      if (typeof seconds !== 'number' || !Number.isFinite(seconds)) {
         return undefined;
       }
-      return time / warpSafe;
+      return seconds / effectiveSecondsPerBeat;
     },
-    [warpSafe]
+    [effectiveSecondsPerBeat]
   );
-  const syncedTimeRef = useRef(convertPlaybackTime(currentTime) ?? 0);
+
+  // Current position in beats (synced from playback)
+  const syncedBeatRef = useRef(secondsToBeats(currentTime) ?? 0);
   const syncedTimestampRef = useRef<number>(0);
   const isPlayingRef = useRef(isPlaying);
   const activeNoteIndexRef = useRef<number | null>(null);
@@ -184,6 +181,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     };
   }, [minFrequency, maxFrequency]);
 
+  // Map from startChar to note index (for highlighting)
   const noteIndexByStartChar = useMemo(() => {
     const map = new Map<number, number>();
     notes.forEach((note, index) => {
@@ -204,7 +202,9 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     return map;
   }, [notes]);
 
-  const noteStartTimes = useMemo(() => {
+  // Compute adjusted start beats from noteCharTimes (if available)
+  // This allows cursor sync from the ABC notation viewer
+  const noteStartBeats = useMemo(() => {
     return notes.map((note) => {
       const startChar = note.source?.startChar;
       if (
@@ -212,27 +212,29 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
         noteCharTimes &&
         typeof noteCharTimes[startChar] === 'number'
       ) {
-        const converted = convertPlaybackTime(noteCharTimes[startChar]);
-        if (typeof converted === 'number') {
-          return converted;
+        const beatFromCharTime = secondsToBeats(noteCharTimes[startChar]);
+        if (typeof beatFromCharTime === 'number') {
+          return beatFromCharTime;
         }
       }
-      return note.startTime;
+      return note.startBeat;
     });
-  }, [convertPlaybackTime, notes, noteCharTimes]);
+  }, [secondsToBeats, notes, noteCharTimes]);
 
-  const renderedTotalDuration = useMemo(() => {
-    let maxEnd = totalDuration;
+  // Compute total beats including any adjusted notes
+  const renderedTotalBeats = useMemo(() => {
+    let maxEnd = totalBeats;
     notes.forEach((note, index) => {
-      const adjustedStart = noteStartTimes[index] ?? note.startTime;
-      const endTime = adjustedStart + note.duration;
-      if (endTime > maxEnd) {
-        maxEnd = endTime;
+      const adjustedStart = noteStartBeats[index] ?? note.startBeat;
+      const endBeat = adjustedStart + note.durationBeats;
+      if (endBeat > maxEnd) {
+        maxEnd = endBeat;
       }
     });
     return maxEnd;
-  }, [notes, noteStartTimes, totalDuration]);
+  }, [notes, noteStartBeats, totalBeats]);
 
+  // Find the note index for a playback event
   const findNoteIndexForEvent = useCallback(
     (event: NotePlaybackEvent): number | null => {
       const isChordEvent = event.midiPitches.length > 1;
@@ -244,7 +246,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
         }
       }
 
-      const baselineTime = convertPlaybackTime(event.timeSeconds);
+      const eventBeat = secondsToBeats(event.timeSeconds);
 
       if (event.midiPitches.length > 0) {
         const midiSet = new Set(event.midiPitches);
@@ -262,18 +264,18 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
           if (!midiSet.has(note.pitch)) {
             return;
           }
-          const adjustedStart = noteStartTimes[index] ?? note.startTime;
+          const adjustedStart = noteStartBeats[index] ?? note.startBeat;
           const delta =
-            typeof baselineTime === 'number'
-              ? Math.abs(adjustedStart - baselineTime)
+            typeof eventBeat === 'number'
+              ? Math.abs(adjustedStart - eventBeat)
               : Number.POSITIVE_INFINITY;
           const pitchPriority = note.pitch === chordMaxPitch ? 1 : 0;
           const improvesPitchPriority = pitchPriority > bestPitchPriority;
           const matchesPitchPriority = pitchPriority === bestPitchPriority;
           const isClearlyCloser =
-            delta + CHORD_ALIGNMENT_TOLERANCE < smallestDelta;
+            delta + CHORD_ALIGNMENT_TOLERANCE_BEATS < smallestDelta;
           const isSimilarTiming =
-            Math.abs(delta - smallestDelta) <= CHORD_ALIGNMENT_TOLERANCE;
+            Math.abs(delta - smallestDelta) <= CHORD_ALIGNMENT_TOLERANCE_BEATS;
           if (
             improvesPitchPriority ||
             (matchesPitchPriority &&
@@ -295,17 +297,19 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 
       return null;
     },
-    [convertPlaybackTime, noteIndexByStartChar, notes, noteStartTimes]
+    [secondsToBeats, noteIndexByStartChar, notes, noteStartBeats]
   );
 
-  const getDisplayTime = useCallback(() => {
+  // Get the current display beat, accounting for animation
+  const getDisplayBeat = useCallback(() => {
     const now = getTimestamp();
     if (isPlayingRef.current) {
-      const elapsed = (now - syncedTimestampRef.current) / 1000;
-      return syncedTimeRef.current + elapsed / warpSafe;
+      const elapsedSeconds = (now - syncedTimestampRef.current) / 1000;
+      const elapsedBeats = elapsedSeconds / effectiveSecondsPerBeat;
+      return syncedBeatRef.current + elapsedBeats;
     }
-    return syncedTimeRef.current;
-  }, [warpSafe]);
+    return syncedBeatRef.current;
+  }, [effectiveSecondsPerBeat]);
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
@@ -364,13 +368,13 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     const playableTop = innerY + innerHeight * PLAYABLE_EDGE_RATIO;
     const playableBottom = innerY + innerHeight * (1 - PLAYABLE_EDGE_RATIO);
     const playableHeight = Math.max(1, playableBottom - playableTop);
+
+    // Pixels per beat - this is now the primary unit
     const pixelsPerBeat =
       innerHeight > 0 && BEATS_PER_VERTICAL_SPAN > 0
         ? innerHeight / BEATS_PER_VERTICAL_SPAN
-        : null;
-    const pixelsPerSecond = pixelsPerBeat
-      ? pixelsPerBeat / effectiveSecondsPerBeat
-      : FALLBACK_PIXELS_PER_SECOND;
+        : FALLBACK_PIXELS_PER_BEAT;
+
     const noteHeight = Math.min(
       Math.max(2, innerWidth * NOTE_THICKNESS_RATIO),
       playableHeight
@@ -378,6 +382,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 
     const pitchRange = maxPitch - minPitch;
 
+    // Draw pitch lines
     ctx.strokeStyle = '#2a2a2a';
     ctx.lineWidth = 1;
     const labelX = Math.max(NOTE_LABEL_MARGIN, playheadOuterX - NOTE_LABEL_GAP);
@@ -404,13 +409,13 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
       }
     }
 
-    const effectiveTime = (() => {
-      const time = getDisplayTime();
-      return renderedTotalDuration > 0
-        ? Math.min(time, renderedTotalDuration)
-        : time;
+    // Get current beat position
+    const currentBeat = (() => {
+      const beat = getDisplayBeat();
+      return renderedTotalBeats > 0 ? Math.min(beat, renderedTotalBeats) : beat;
     })();
 
+    // Draw instrument (otamatone neck)
     const drawInstrument = () => {
       ctx.fillStyle = '#f5f5f5';
       ctx.fillRect(playheadOuterX, 0, playheadOuterWidth, height);
@@ -428,6 +433,8 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     };
 
     drawInstrument();
+
+    // Draw markers (beat/measure lines)
     const drawMarkers = (
       markers: number[],
       options: {
@@ -447,14 +454,14 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
       ctx.clip();
       ctx.fillStyle = options.color;
       let firstVisible: { position: number; centerX: number } | null = null;
-      markers.forEach((marker) => {
-        if (typeof marker !== 'number' || !Number.isFinite(marker)) {
+      markers.forEach((markerBeat) => {
+        if (typeof markerBeat !== 'number' || !Number.isFinite(markerBeat)) {
           return;
         }
-        if (options.filter && !options.filter(marker)) {
+        if (options.filter && !options.filter(markerBeat)) {
           return;
         }
-        const centerX = playheadX + (marker - effectiveTime) * pixelsPerSecond;
+        const centerX = playheadX + (markerBeat - currentBeat) * pixelsPerBeat;
         if (centerX + markerWidth < innerX || centerX - markerWidth > width) {
           return;
         }
@@ -465,7 +472,7 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
           innerHeight
         );
         if (!firstVisible) {
-          firstVisible = { position: marker, centerX };
+          firstVisible = { position: markerBeat, centerX };
         }
       });
       if (firstVisible && options.onFirstVisible) {
@@ -474,13 +481,11 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
       ctx.restore();
     };
 
-    const measureNearBeatEpsilon = Math.max(
-      1e-3,
-      effectiveSecondsPerBeat / 100
-    );
-    const skipBeatsNearMeasures = (value: number) => {
+    // Skip beats that are near measure boundaries
+    const measureNearBeatEpsilon = 0.01; // in beats
+    const skipBeatsNearMeasures = (beat: number) => {
       return measureBoundaries.some(
-        (boundary) => Math.abs(boundary - value) < measureNearBeatEpsilon
+        (boundary) => Math.abs(boundary - beat) < measureNearBeatEpsilon
       );
     };
 
@@ -497,10 +502,10 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
       color: 'rgba(255, 255, 255, 0.35)',
       onFirstVisible: ({ position, centerX }) => {
         const summaryObject = {
-          boundarySeconds: Number(position.toFixed(4)),
+          boundaryBeat: Number(position.toFixed(4)),
           canvasX: Number(centerX.toFixed(2)),
-          effectiveTime: Number(effectiveTime.toFixed(3)),
-          pixelsPerSecond: Number(pixelsPerSecond.toFixed(2)),
+          currentBeat: Number(currentBeat.toFixed(3)),
+          pixelsPerBeat: Number(pixelsPerBeat.toFixed(2)),
         };
         const summary = JSON.stringify(summaryObject);
         if (measureBoundaryLogRef.current !== summary) {
@@ -516,17 +521,18 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
 
     const activeNoteIndex = activeNoteIndexRef.current;
 
+    // Draw notes
     ctx.save();
     ctx.beginPath();
     ctx.rect(innerX, 0, width - innerX, height);
     ctx.clip();
 
     notes.forEach((note, index) => {
-      const adjustedStart = noteStartTimes[index] ?? note.startTime;
-      const timeDiff = adjustedStart - effectiveTime;
-      const effectiveDuration = Math.max(note.duration, 0);
-      const x = playheadX + timeDiff * pixelsPerSecond;
-      const noteWidth = effectiveDuration * pixelsPerSecond;
+      const adjustedStartBeat = noteStartBeats[index] ?? note.startBeat;
+      const beatDiff = adjustedStartBeat - currentBeat;
+      const durationBeats = Math.max(note.durationBeats, 0);
+      const x = playheadX + beatDiff * pixelsPerBeat;
+      const noteWidth = durationBeats * pixelsPerBeat;
       const noteRight = x + noteWidth;
       const noteFrequency = midiToFrequency(note.pitch);
       const normalized = stemPosition(
@@ -554,9 +560,9 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
       let color: string;
       if (isActiveNote) {
         color = '#facc15';
-      } else if (timeDiff > 0) {
+      } else if (beatDiff > 0) {
         color = '#4a9eff';
-      } else if (timeDiff + note.duration > 0) {
+      } else if (beatDiff + durationBeats > 0) {
         color = '#4ade80';
       } else {
         color = '#666666';
@@ -579,21 +585,20 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     });
     ctx.restore();
   }, [
-    getDisplayTime,
+    getDisplayBeat,
     notes,
-    noteStartTimes,
-    renderedTotalDuration,
+    noteStartBeats,
+    renderedTotalBeats,
     minPitch,
     maxPitch,
     minFrequency,
     maxFrequency,
-    effectiveSecondsPerBeat,
     measureBoundaries,
     beatBoundaries,
   ]);
 
   useEffect(() => {
-    console.debug('[OtamatoneRoll] measure boundaries updated', {
+    console.debug('[OtamatoneRoll] measure boundaries updated (beats)', {
       count: measureBoundaries.length,
       values: measureBoundaries.slice(0, 8),
     });
@@ -631,30 +636,35 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     };
   }, [renderFrame]);
 
+  // Sync current time (in seconds) to current beat
   useEffect(() => {
-    const baselineTime = convertPlaybackTime(currentTime);
-    if (typeof baselineTime === 'number') {
-      syncedTimeRef.current = baselineTime;
+    const beat = secondsToBeats(currentTime);
+    if (typeof beat === 'number') {
+      syncedBeatRef.current = beat;
     }
     syncedTimestampRef.current = getTimestamp();
     if (!isPlayingRef.current) {
       renderFrame();
     }
-  }, [convertPlaybackTime, currentTime, renderFrame]);
+  }, [secondsToBeats, currentTime, renderFrame]);
 
+  // Handle play/pause state changes
   useEffect(() => {
     const now = getTimestamp();
     if (isPlayingRef.current && !isPlaying) {
-      syncedTimeRef.current +=
-        (now - syncedTimestampRef.current) / 1000 / warpSafe;
+      // Stopping: update synced beat to current animated position
+      const elapsedSeconds = (now - syncedTimestampRef.current) / 1000;
+      const elapsedBeats = elapsedSeconds / effectiveSecondsPerBeat;
+      syncedBeatRef.current += elapsedBeats;
     }
     syncedTimestampRef.current = now;
     isPlayingRef.current = isPlaying;
     if (!isPlaying) {
       renderFrame();
     }
-  }, [isPlaying, renderFrame, warpSafe]);
+  }, [isPlaying, renderFrame, effectiveSecondsPerBeat]);
 
+  // Handle active note events
   useEffect(() => {
     if (!activeNoteEvent) {
       activeNoteIndexRef.current = null;
@@ -668,20 +678,16 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     latestEventIdRef.current = activeNoteEvent.sequenceId;
     activeNoteIndexRef.current = findNoteIndexForEvent(activeNoteEvent);
 
-    const baselineTime = convertPlaybackTime(activeNoteEvent.timeSeconds);
-    if (typeof baselineTime === 'number') {
-      syncedTimeRef.current = baselineTime;
+    const beat = secondsToBeats(activeNoteEvent.timeSeconds);
+    if (typeof beat === 'number') {
+      syncedBeatRef.current = beat;
     }
     syncedTimestampRef.current = getTimestamp();
 
     renderFrame();
-  }, [
-    activeNoteEvent,
-    convertPlaybackTime,
-    findNoteIndexForEvent,
-    renderFrame,
-  ]);
+  }, [activeNoteEvent, secondsToBeats, findNoteIndexForEvent, renderFrame]);
 
+  // Reset active note when notes change
   useEffect(() => {
     activeNoteIndexRef.current = null;
     latestEventIdRef.current = 0;

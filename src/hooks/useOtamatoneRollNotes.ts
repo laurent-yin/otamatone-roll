@@ -6,12 +6,21 @@ import {
   buildTimingDerivedData,
   TimingEvent,
   VisualObjWithTimings,
+  DEFAULT_SECONDS_PER_BEAT,
+  TimingDerivedData,
 } from '../utils/abcTiming';
 
+/**
+ * Result of the useOtamatoneRollNotes hook.
+ * Contains the beat-based timeline (invariant) plus tempo info for playback.
+ */
 export type OtamatoneRollNotesResult = NoteTimeline & {
-  baselineSecondsPerBeat: number;
-  playbackSecondsPerBeat: number;
+  /** Baseline tempo from the ABC notation (seconds per beat) */
+  secondsPerBeat: number;
 };
+
+// Re-export for backward compatibility
+export { DEFAULT_SECONDS_PER_BEAT };
 
 /**
  * Extended TuneObject with setUpAudio method for preparing timing data.
@@ -28,19 +37,20 @@ type TimingCallbacksInstance = {
   replaceTarget?: (target: VisualObjWithTimings) => void;
   qpm?: number;
 };
-const isPositiveNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value) && value > 0;
 
 const isBrowser = () => typeof document !== 'undefined';
-const DEFAULT_BPM = 120;
-export const DEFAULT_SECONDS_PER_BEAT = 60 / DEFAULT_BPM;
 
-const createEmptyTimeline = (secondsPerBeat = DEFAULT_SECONDS_PER_BEAT) => ({
+const createEmptyTimeline = (): NoteTimeline => ({
   notes: [],
-  totalDuration: 0,
-  secondsPerBeat,
+  totalBeats: 0,
+  beatsPerMeasure: 4,
   measureBoundaries: [],
   beatBoundaries: [],
+});
+
+const createEmptyResult = (): OtamatoneRollNotesResult => ({
+  ...createEmptyTimeline(),
+  secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
 });
 
 const extractSecondsPerBeat = (qpm?: number): number | undefined => {
@@ -65,9 +75,13 @@ const createHiddenContainer = () => {
 const deriveTimelineFromTimingData = (
   visualObj: VisualObjWithAudioSupport,
   callbacks: TimingCallbacksInstance | null
-): NoteTimeline => {
+): TimingDerivedData => {
   if (!callbacks) {
-    return createEmptyTimeline();
+    return {
+      charMap: {},
+      timeline: createEmptyTimeline(),
+      secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
+    };
   }
   try {
     visualObj.setUpAudio?.();
@@ -80,23 +94,30 @@ const deriveTimelineFromTimingData = (
     ? callbacks.noteTimings
     : [];
   if (timings.length === 0) {
-    return createEmptyTimeline();
+    return {
+      charMap: {},
+      timeline: createEmptyTimeline(),
+      secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
+    };
   }
-  const derived = buildTimingDerivedData(visualObj, timings, {
+  return buildTimingDerivedData(visualObj, timings, {
     secondsPerBeat: extractSecondsPerBeat(callbacks.qpm),
   });
-  return derived.timeline;
 };
 
-export const buildBaselineTimelineFromNotation = (
+/**
+ * Build the beat-based timeline from ABC notation.
+ * This is computed once and is invariant to tempo changes.
+ */
+export const buildTimelineFromNotation = (
   notation: string
-): NoteTimeline => {
+): OtamatoneRollNotesResult => {
   if (!notation || notation.trim() === '') {
-    return createEmptyTimeline();
+    return createEmptyResult();
   }
 
   if (!isBrowser()) {
-    return createEmptyTimeline();
+    return createEmptyResult();
   }
 
   let container: HTMLDivElement | null = null;
@@ -112,7 +133,7 @@ export const buildBaselineTimelineFromNotation = (
         : null) ?? null;
 
     if (!visualObj) {
-      return createEmptyTimeline();
+      return createEmptyResult();
     }
 
     const TimingCallbacksCtor = abcjs.TimingCallbacks as unknown as
@@ -125,17 +146,18 @@ export const buildBaselineTimelineFromNotation = (
       console.warn(
         'abcjs TimingCallbacks unavailable; returning fallback timeline.'
       );
-      return createEmptyTimeline();
+      return createEmptyResult();
     }
 
     const timingCallbacks = new TimingCallbacksCtor(visualObj, {});
-    return deriveTimelineFromTimingData(visualObj, timingCallbacks);
+    const derived = deriveTimelineFromTimingData(visualObj, timingCallbacks);
+    return {
+      ...derived.timeline,
+      secondsPerBeat: derived.secondsPerBeat,
+    };
   } catch (error) {
-    console.error(
-      'Error deriving baseline timeline from abcjs timing data',
-      error
-    );
-    return createEmptyTimeline();
+    console.error('Error deriving timeline from abcjs timing data', error);
+    return createEmptyResult();
   } finally {
     if (container) {
       container.remove();
@@ -143,56 +165,17 @@ export const buildBaselineTimelineFromNotation = (
   }
 };
 
-export const normalizeTimelineToBaseline = (
-  timeline: NoteTimeline,
-  baselineSecondsPerBeat: number
-): NoteTimeline => {
-  return {
-    notes: timeline.notes.map((note) => ({ ...note })),
-    totalDuration: timeline.totalDuration,
-    secondsPerBeat: baselineSecondsPerBeat,
-    measureBoundaries: Array.isArray(timeline.measureBoundaries)
-      ? [...timeline.measureBoundaries]
-      : [],
-    beatBoundaries: Array.isArray(timeline.beatBoundaries)
-      ? [...timeline.beatBoundaries]
-      : [],
-  };
-};
-
-export const createOtamatoneRollNotesResult = (
-  baselineTimeline: NoteTimeline,
-  overrideTimeline?: NoteTimeline | null
-): OtamatoneRollNotesResult => {
-  const baselineSecondsPerBeat = isPositiveNumber(
-    baselineTimeline.secondsPerBeat
-  )
-    ? (baselineTimeline.secondsPerBeat as number)
-    : DEFAULT_SECONDS_PER_BEAT;
-
-  const sourceTimeline = overrideTimeline ?? baselineTimeline;
-  const playbackSecondsPerBeat = isPositiveNumber(sourceTimeline.secondsPerBeat)
-    ? (sourceTimeline.secondsPerBeat as number)
-    : baselineSecondsPerBeat;
-  const normalizedTimeline = normalizeTimelineToBaseline(
-    sourceTimeline,
-    baselineSecondsPerBeat
-  );
-  return {
-    ...normalizedTimeline,
-    baselineSecondsPerBeat,
-    playbackSecondsPerBeat,
-  };
-};
-
+/**
+ * Hook to get the beat-based note timeline from ABC notation.
+ * The timeline is computed once and is invariant to tempo/warp changes.
+ *
+ * @param notation - The ABC notation string
+ * @returns The beat-based timeline plus tempo info
+ */
 export const useOtamatoneRollNotes = (
-  notation: string,
-  override?: NoteTimeline | null
+  notation: string
 ): OtamatoneRollNotesResult => {
-  const baselineTimeline = useMemo<NoteTimeline>(() => {
-    return buildBaselineTimelineFromNotation(notation);
-  }, [notation]);
   return useMemo(() => {
-    return createOtamatoneRollNotesResult(baselineTimeline, override);
-  }, [baselineTimeline, override]);
+    return buildTimelineFromNotation(notation);
+  }, [notation]);
 };

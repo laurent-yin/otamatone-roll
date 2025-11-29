@@ -15,6 +15,7 @@ interface AbcNotationViewerProps {
   onNoteEvent?: (event: NotePlaybackEvent) => void;
   onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
   onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
+  onSecondsPerBeatChange?: (secondsPerBeat: number) => void;
 }
 
 export const AbcNotationViewer = ({
@@ -27,6 +28,7 @@ export const AbcNotationViewer = ({
   onNoteEvent,
   onCharTimeMapChange,
   onNoteTimelineChange,
+  onSecondsPerBeatChange,
 }: AbcNotationViewerProps) => {
   const resolvedAudioContainerId =
     audioContainerId ||
@@ -41,6 +43,7 @@ export const AbcNotationViewer = ({
     onNoteEvent,
     onCharTimeMapChange,
     onNoteTimelineChange,
+    onSecondsPerBeatChange,
   });
 
   return (
