@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
+import { useAppStore } from '../store/appStore';
 
-interface AbcEditorProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-export const AbcEditor = ({ value, onChange }: AbcEditorProps) => {
+/**
+ * ABC notation editor that reads/writes to the Zustand store.
+ * Uses local state + debouncing to avoid re-renders on every keystroke.
+ */
+export const AbcEditor = () => {
+  const notation = useAppStore((state) => state.notation);
+  const setNotation = useAppStore((state) => state.setNotation);
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [localValue, setLocalValue] = useState(value);
+  const [localValue, setLocalValue] = useState(notation);
   const timeoutRef = useRef<number | undefined>(undefined);
 
-  // Update local value if parent value changes externally
+  // Update local value if store value changes externally
   useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
+    setLocalValue(notation);
+  }, [notation]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -27,14 +30,14 @@ export const AbcEditor = ({ value, onChange }: AbcEditorProps) => {
     const newValue = e.target.value;
     setLocalValue(newValue);
 
-    // Debounce the onChange callback to avoid too many re-renders
+    // Debounce the setNotation to avoid too many re-renders
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
     timeoutRef.current = window.setTimeout(() => {
-      onChange(newValue);
-    }, 300); // Update preview after 300ms of no typing
+      setNotation(newValue);
+    }, 300); // Update store after 300ms of no typing
   };
 
   return (

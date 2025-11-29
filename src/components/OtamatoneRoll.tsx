@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useAppStore } from '../store/appStore';
 import { DEFAULT_SECONDS_PER_BEAT } from '../hooks/useOtamatoneRollNotes';
-import {
-  NoteCharTimeMap,
-  NotePlaybackEvent,
-  NoteTimeline,
-} from '../types/music';
 import {
   DEFAULT_HIGHEST_MIDI,
   DEFAULT_LOWEST_MIDI,
@@ -13,22 +9,7 @@ import {
   stemPosition,
   midiToNoteName,
 } from '../utils/frequency';
-
-interface OtamatoneRollProps {
-  /** Current playback time in seconds */
-  currentTime?: number;
-  isPlaying?: boolean;
-  activeNoteEvent?: NotePlaybackEvent | null;
-  noteCharTimes?: NoteCharTimeMap;
-  /** Current playback tempo - may change with warp/speed controls */
-  currentSecondsPerBeat?: number;
-  /** The note timeline from the ABC notation (single source of truth) */
-  noteTimeline?: NoteTimeline | null;
-  /** Baseline seconds per beat from the ABC notation */
-  baselineSecondsPerBeat?: number;
-  lowestNoteHz?: number;
-  highestNoteHz?: number;
-}
+import { NotePlaybackEvent } from '../types/music';
 
 const PLAYHEAD_VERTICAL_INSET = 12;
 const PLAYABLE_EDGE_RATIO = 0.03;
@@ -94,17 +75,24 @@ const drawRoundedRect = (
   ctx.closePath();
 };
 
-export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
-  currentTime = 0,
-  isPlaying = false,
-  activeNoteEvent = null,
-  noteCharTimes,
-  currentSecondsPerBeat,
-  noteTimeline,
-  baselineSecondsPerBeat,
-  lowestNoteHz,
-  highestNoteHz,
-}) => {
+/**
+ * Otamatone Roll visualization component.
+ * Reads all state from the Zustand store - no props needed.
+ */
+export const OtamatoneRoll: React.FC = () => {
+  // Read state from store
+  const currentTime = useAppStore((state) => state.currentTime);
+  const isPlaying = useAppStore((state) => state.isPlaying);
+  const activeNoteEvent = useAppStore((state) => state.activeNoteEvent);
+  const noteCharTimes = useAppStore((state) => state.noteCharTimes);
+  const currentSecondsPerBeat = useAppStore((state) => state.currentSecondsPerBeat);
+  const noteTimeline = useAppStore((state) => state.noteTimeline);
+  const getSanitizedLowestNoteHz = useAppStore((state) => state.getSanitizedLowestNoteHz);
+  const getSanitizedHighestNoteHz = useAppStore((state) => state.getSanitizedHighestNoteHz);
+
+  const lowestNoteHz = getSanitizedLowestNoteHz();
+  const highestNoteHz = getSanitizedHighestNoteHz();
+  
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
 
@@ -120,13 +108,11 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
     [noteTimeline?.beatBoundaries]
   );
 
-  // Use current playback tempo if provided, otherwise use baseline
+  // Use current playback tempo from store
   const effectiveSecondsPerBeat =
     typeof currentSecondsPerBeat === 'number' && currentSecondsPerBeat > 0
       ? currentSecondsPerBeat
-      : typeof baselineSecondsPerBeat === 'number' && baselineSecondsPerBeat > 0
-        ? baselineSecondsPerBeat
-        : DEFAULT_SECONDS_PER_BEAT;
+      : DEFAULT_SECONDS_PER_BEAT;
 
   // Convert seconds to beats using current tempo
   const secondsToBeats = useCallback(

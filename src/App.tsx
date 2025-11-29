@@ -1,23 +1,9 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, useEffect, useMemo } from 'react';
 import { DockviewLayout } from './components/DockviewLayout';
-import { DEFAULT_ABC_NOTATION } from './constants/abc-notation';
-import {
-  NoteCharTimeMap,
-  NotePlaybackEvent,
-  NoteTimeline,
-} from './types/music';
-import {
-  DEFAULT_HIGHEST_FREQUENCY,
-  DEFAULT_LOWEST_FREQUENCY,
-} from './utils/frequency';
-import { getCookie, setCookie } from './utils/cookies';
+import { useAppStore } from './store/appStore';
 import { buildTimelinePreviewImage } from './utils/timelinePreview';
 
 const AUDIO_CONTROLS_ID = 'abc-global-audio-controls';
-const LOWEST_NOTE_COOKIE = 'or-lowest-note-hz';
-const HIGHEST_NOTE_COOKIE = 'or-highest-note-hz';
-const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // one year
-const NOTATION_STORAGE_KEY = 'or-abc-notation';
 const FALLBACK_PROGRESS_HEIGHT_PX = 28;
 
 const isBrowser = () => typeof window !== 'undefined';
@@ -39,73 +25,20 @@ const readProgressControlHeight = () => {
   return parsed;
 };
 
-const readFrequencyCookie = (cookieName: string, fallback: number) => {
-  const raw = getCookie(cookieName);
-  if (raw === undefined) {
-    return fallback;
-  }
-
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-
-  return parsed;
-};
-
-const readStoredNotation = () => {
-  if (!isBrowser()) {
-    return DEFAULT_ABC_NOTATION;
-  }
-  try {
-    const stored = window.localStorage.getItem(NOTATION_STORAGE_KEY);
-    if (stored !== null && stored.trim().length > 0) {
-      return stored;
-    }
-  } catch (error) {
-    console.warn('Unable to read notation from localStorage', error);
-  }
-  return DEFAULT_ABC_NOTATION;
-};
-
 const App = () => {
-  const [notation, setNotation] = useState<string>(() => readStoredNotation());
-  const [currentTime, setCurrentTime] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [activeNoteEvent, setActiveNoteEvent] =
-    useState<NotePlaybackEvent | null>(null);
-  const [noteCharTimes, setNoteCharTimes] = useState<NoteCharTimeMap>({});
-  const [noteTimeline, setNoteTimeline] = useState<NoteTimeline | null>(null);
-  const [currentSecondsPerBeat, setCurrentSecondsPerBeat] = useState<
-    number | undefined
-  >();
-  const [lowestNoteHz, setLowestNoteHz] = useState<number>(() =>
-    readFrequencyCookie(LOWEST_NOTE_COOKIE, DEFAULT_LOWEST_FREQUENCY)
-  );
-  const [highestNoteHz, setHighestNoteHz] = useState<number>(() =>
-    readFrequencyCookie(HIGHEST_NOTE_COOKIE, DEFAULT_HIGHEST_FREQUENCY)
-  );
+  // Read state from store
+  const noteTimeline = useAppStore((state) => state.noteTimeline);
+  const lowestNoteHz = useAppStore((state) => state.lowestNoteHz);
+  const highestNoteHz = useAppStore((state) => state.highestNoteHz);
+  const setLowestNoteHz = useAppStore((state) => state.setLowestNoteHz);
+  const setHighestNoteHz = useAppStore((state) => state.setHighestNoteHz);
+  const getSanitizedLowestNoteHz = useAppStore((state) => state.getSanitizedLowestNoteHz);
+  const getSanitizedHighestNoteHz = useAppStore((state) => state.getSanitizedHighestNoteHz);
+
+  const sanitizedLowestNoteHz = getSanitizedLowestNoteHz();
+  const sanitizedHighestNoteHz = getSanitizedHighestNoteHz();
+
   const progressPreviewHeight = useMemo(() => readProgressControlHeight(), []);
-
-  const sanitizedLowestNoteHz = useMemo(() => {
-    if (!Number.isFinite(lowestNoteHz) || lowestNoteHz <= 0) {
-      return DEFAULT_LOWEST_FREQUENCY;
-    }
-    return lowestNoteHz;
-  }, [lowestNoteHz]);
-
-  const sanitizedHighestNoteHz = useMemo(() => {
-    const fallback = Math.max(
-      DEFAULT_HIGHEST_FREQUENCY,
-      sanitizedLowestNoteHz + 1
-    );
-
-    if (!Number.isFinite(highestNoteHz) || highestNoteHz <= 0) {
-      return fallback;
-    }
-
-    return Math.max(highestNoteHz, sanitizedLowestNoteHz + 1);
-  }, [highestNoteHz, sanitizedLowestNoteHz]);
 
   const timelinePreviewImage = useMemo(() => {
     return buildTimelinePreviewImage(noteTimeline, {
@@ -120,29 +53,6 @@ const App = () => {
     sanitizedHighestNoteHz,
     progressPreviewHeight,
   ]);
-
-  useEffect(() => {
-    setCookie(LOWEST_NOTE_COOKIE, String(sanitizedLowestNoteHz), {
-      maxAgeSeconds: COOKIE_MAX_AGE_SECONDS,
-    });
-  }, [sanitizedLowestNoteHz]);
-
-  useEffect(() => {
-    setCookie(HIGHEST_NOTE_COOKIE, String(sanitizedHighestNoteHz), {
-      maxAgeSeconds: COOKIE_MAX_AGE_SECONDS,
-    });
-  }, [sanitizedHighestNoteHz]);
-
-  useEffect(() => {
-    if (!isBrowser()) {
-      return;
-    }
-    try {
-      window.localStorage.setItem(NOTATION_STORAGE_KEY, notation);
-    } catch (error) {
-      console.warn('Unable to persist notation to localStorage', error);
-    }
-  }, [notation]);
 
   const handleFrequencyChange = (
     event: ChangeEvent<HTMLInputElement>,
@@ -285,25 +195,7 @@ const App = () => {
         </div>
       </header>
       <main className="app-main">
-        <DockviewLayout
-          notation={notation}
-          onNotationChange={setNotation}
-          audioContainerId={AUDIO_CONTROLS_ID}
-          currentTime={currentTime}
-          isPlaying={isPlaying}
-          onCurrentTimeChange={setCurrentTime}
-          onPlayingChange={setIsPlaying}
-          onNoteEvent={setActiveNoteEvent}
-          activeNoteEvent={activeNoteEvent}
-          noteCharTimes={noteCharTimes}
-          onCharTimeMapChange={setNoteCharTimes}
-          noteTimeline={noteTimeline}
-          onNoteTimelineChange={setNoteTimeline}
-          currentSecondsPerBeat={currentSecondsPerBeat}
-          onSecondsPerBeatChange={setCurrentSecondsPerBeat}
-          lowestNoteHz={sanitizedLowestNoteHz}
-          highestNoteHz={sanitizedHighestNoteHz}
-        />
+        <DockviewLayout audioContainerId={AUDIO_CONTROLS_ID} />
       </main>
     </div>
   );

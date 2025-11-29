@@ -1,84 +1,77 @@
-import { useEffect, useMemo, useRef } from 'react';
-import {
-  NoteCharTimeMap,
-  NotePlaybackEvent,
-  NoteTimeline,
-} from '../types/music';
+import { useEffect, useRef } from 'react';
+import { useAppStore } from '../store/appStore';
 import {
   AbcPlaybackController,
   AbcPlaybackCallbacks,
 } from '../services/abcPlayback';
 
 interface UseAbcRendererProps {
-  notation: string;
   containerId: string;
   audioContainerId?: string;
-  onCurrentTimeChange?: (currentTime: number) => void;
-  onPlayingChange?: (isPlaying: boolean) => void;
-  onNoteEvent?: (event: NotePlaybackEvent) => void;
-  onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
-  onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
-  onSecondsPerBeatChange?: (secondsPerBeat: number) => void;
 }
 
+/**
+ * Hook that renders ABC notation and manages playback.
+ * Reads notation from the store and writes playback state back to the store.
+ * No more callback props needed - everything goes through Zustand.
+ */
 export const useAbcRenderer = ({
-  notation,
   containerId,
   audioContainerId,
-  onCurrentTimeChange,
-  onPlayingChange,
-  onNoteEvent,
-  onCharTimeMapChange,
-  onNoteTimelineChange,
-  onSecondsPerBeatChange,
 }: UseAbcRendererProps) => {
   const previousRenderKey = useRef<string>('');
   const controllerRef = useRef<AbcPlaybackController | null>(null);
-  const latestCallbacksRef = useRef<AbcPlaybackCallbacks>({});
   const pendingFrameRef = useRef<number | null>(null);
 
+  // Get state and setters from store
+  const notation = useAppStore((state) => state.notation);
+  const setCurrentTime = useAppStore((state) => state.setCurrentTime);
+  const setIsPlaying = useAppStore((state) => state.setIsPlaying);
+  const setActiveNoteEvent = useAppStore((state) => state.setActiveNoteEvent);
+  const setNoteCharTimes = useAppStore((state) => state.setNoteCharTimes);
+  const setNoteTimeline = useAppStore((state) => state.setNoteTimeline);
+  const setCurrentSecondsPerBeat = useAppStore(
+    (state) => state.setCurrentSecondsPerBeat
+  );
+
+  // Create stable callbacks object using refs to avoid re-creating controller
+  const callbacksRef = useRef<AbcPlaybackCallbacks>({});
+
+  // Keep callbacks up to date
   useEffect(() => {
-    latestCallbacksRef.current = {
-      onCurrentTimeChange,
-      onPlayingChange,
-      onNoteEvent,
-      onCharTimeMapChange,
-      onNoteTimelineChange,
-      onSecondsPerBeatChange,
+    callbacksRef.current = {
+      onCurrentTimeChange: setCurrentTime,
+      onPlayingChange: setIsPlaying,
+      onNoteEvent: setActiveNoteEvent,
+      onCharTimeMapChange: setNoteCharTimes,
+      onNoteTimelineChange: setNoteTimeline,
+      onSecondsPerBeatChange: setCurrentSecondsPerBeat,
     };
   }, [
-    onCurrentTimeChange,
-    onPlayingChange,
-    onNoteEvent,
-    onCharTimeMapChange,
-    onNoteTimelineChange,
-    onSecondsPerBeatChange,
+    setCurrentTime,
+    setIsPlaying,
+    setActiveNoteEvent,
+    setNoteCharTimes,
+    setNoteTimeline,
+    setCurrentSecondsPerBeat,
   ]);
 
-  const callbackProxy = useMemo<AbcPlaybackCallbacks>(() => {
-    return {
-      onCurrentTimeChange: (value) =>
-        latestCallbacksRef.current.onCurrentTimeChange?.(value),
-      onPlayingChange: (value) =>
-        latestCallbacksRef.current.onPlayingChange?.(value),
-      onNoteEvent: (event) => latestCallbacksRef.current.onNoteEvent?.(event),
-      onCharTimeMapChange: (map) =>
-        latestCallbacksRef.current.onCharTimeMapChange?.(map),
-      onNoteTimelineChange: (timeline) =>
-        latestCallbacksRef.current.onNoteTimelineChange?.(timeline),
-      onSecondsPerBeatChange: (secondsPerBeat) =>
-        latestCallbacksRef.current.onSecondsPerBeatChange?.(secondsPerBeat),
-    };
-  }, []);
+  // Create a proxy that always calls the latest callbacks
+  const callbackProxy: AbcPlaybackCallbacks = {
+    onCurrentTimeChange: (value) =>
+      callbacksRef.current.onCurrentTimeChange?.(value),
+    onPlayingChange: (value) => callbacksRef.current.onPlayingChange?.(value),
+    onNoteEvent: (event) => callbacksRef.current.onNoteEvent?.(event),
+    onCharTimeMapChange: (map) =>
+      callbacksRef.current.onCharTimeMapChange?.(map),
+    onNoteTimelineChange: (timeline) =>
+      callbacksRef.current.onNoteTimelineChange?.(timeline),
+    onSecondsPerBeatChange: (secondsPerBeat) =>
+      callbacksRef.current.onSecondsPerBeatChange?.(secondsPerBeat),
+  };
 
   useEffect(() => {
     const renderKey = `${containerId}::${audioContainerId ?? ''}::${notation}`;
-
-    // Don't initialize until we have at least the timeline callback
-    // This handles the case where dockview restores a panel before updateParameters is called
-    if (!onNoteTimelineChange) {
-      return;
-    }
 
     if (
       controllerRef.current &&
@@ -94,8 +87,8 @@ export const useAbcRenderer = ({
     controllerRef.current = null;
 
     const resetDerivedData = () => {
-      latestCallbacksRef.current.onCharTimeMapChange?.({});
-      latestCallbacksRef.current.onNoteTimelineChange?.(null);
+      setNoteCharTimes({});
+      setNoteTimeline(null);
     };
 
     if (!notation || notation.trim() === '') {
@@ -167,11 +160,7 @@ export const useAbcRenderer = ({
       controllerRef.current?.dispose();
       controllerRef.current = null;
     };
-  }, [
-    notation,
-    containerId,
-    audioContainerId,
-    callbackProxy,
-    onNoteTimelineChange,
-  ]);
+    // Note: callbackProxy is stable (uses refs internally), so we don't need it in deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notation, containerId, audioContainerId, setNoteCharTimes, setNoteTimeline]);
 };

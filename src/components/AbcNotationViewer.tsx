@@ -1,49 +1,27 @@
 import { useAbcRenderer } from '../hooks/useAbcRenderer';
-import {
-  NoteCharTimeMap,
-  NotePlaybackEvent,
-  NoteTimeline,
-} from '../types/music';
 
 interface AbcNotationViewerProps {
-  notation: string;
   containerId?: string;
   audioContainerId?: string;
   showAudioControls?: boolean;
-  onCurrentTimeChange?: (time: number) => void;
-  onPlayingChange?: (playing: boolean) => void;
-  onNoteEvent?: (event: NotePlaybackEvent) => void;
-  onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
-  onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
-  onSecondsPerBeatChange?: (secondsPerBeat: number) => void;
 }
 
+/**
+ * Renders ABC notation from the store and manages playback.
+ * All state is read/written through the Zustand store - no callback props needed.
+ */
 export const AbcNotationViewer = ({
-  notation,
   containerId = 'abc-notation-container',
   audioContainerId,
   showAudioControls = true,
-  onCurrentTimeChange,
-  onPlayingChange,
-  onNoteEvent,
-  onCharTimeMapChange,
-  onNoteTimelineChange,
-  onSecondsPerBeatChange,
 }: AbcNotationViewerProps) => {
   const resolvedAudioContainerId =
     audioContainerId ||
     (showAudioControls ? `${containerId}-audio` : undefined);
 
   useAbcRenderer({
-    notation,
     containerId,
     audioContainerId: resolvedAudioContainerId,
-    onCurrentTimeChange,
-    onPlayingChange,
-    onNoteEvent,
-    onCharTimeMapChange,
-    onNoteTimelineChange,
-    onSecondsPerBeatChange,
   });
 
   return (

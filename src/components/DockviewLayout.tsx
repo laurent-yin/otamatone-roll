@@ -12,31 +12,9 @@ import 'dockview/dist/styles/dockview.css';
 import { AbcEditor } from './AbcEditor';
 import { AbcNotationViewer } from './AbcNotationViewer';
 import { OtamatoneRoll } from './OtamatoneRoll';
-import {
-  NoteCharTimeMap,
-  NotePlaybackEvent,
-  NoteTimeline,
-} from '../types/music';
 
 interface DockviewLayoutProps {
-  notation: string;
-  onNotationChange: (notation: string) => void;
-  currentTime: number;
-  isPlaying: boolean;
   audioContainerId?: string;
-  onCurrentTimeChange: (time: number) => void;
-  onPlayingChange: (playing: boolean) => void;
-  onNoteEvent?: (event: NotePlaybackEvent) => void;
-  activeNoteEvent?: NotePlaybackEvent | null;
-  noteCharTimes?: NoteCharTimeMap;
-  onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
-  noteTimeline?: NoteTimeline | null;
-  onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
-  /** Current playback tempo - may change with warp/speed controls */
-  currentSecondsPerBeat?: number;
-  onSecondsPerBeatChange?: (secondsPerBeat: number) => void;
-  lowestNoteHz?: number;
-  highestNoteHz?: number;
 }
 
 const DOCKVIEW_LAYOUT_STORAGE_KEY = 'or-dockview-layout';
@@ -245,36 +223,21 @@ const persistLayout = (api: DockviewApi) => {
   }
 };
 
-const EditorPanel = (
-  props: IDockviewPanelProps<{
-    notation: string;
-    onChange: (value: string) => void;
-  }>
-) => {
-  return (
-    <AbcEditor value={props.params.notation} onChange={props.params.onChange} />
-  );
+/**
+ * Editor panel - uses AbcEditor which reads/writes from store
+ */
+const EditorPanel = () => {
+  return <AbcEditor />;
 };
 
+/**
+ * Preview panel - uses AbcNotationViewer which reads from store
+ */
 const PreviewPanel = (
   props: IDockviewPanelProps<{
-    notation: string;
     audioContainerId?: string;
-    onCurrentTimeChange: (time: number) => void;
-    onPlayingChange: (playing: boolean) => void;
-    onNoteEvent?: (event: NotePlaybackEvent) => void;
-    onCharTimeMapChange?: (map: NoteCharTimeMap) => void;
-    onNoteTimelineChange?: (timeline: NoteTimeline | null) => void;
-    onSecondsPerBeatChange?: (secondsPerBeat: number) => void;
   }>
 ) => {
-  const notation = props.params?.notation || '';
-  const onCurrentTimeChange = props.params?.onCurrentTimeChange;
-  const onPlayingChange = props.params?.onPlayingChange;
-  const onNoteEvent = props.params?.onNoteEvent;
-  const onCharTimeMapChange = props.params?.onCharTimeMapChange;
-  const onNoteTimelineChange = props.params?.onNoteTimelineChange;
-  const onSecondsPerBeatChange = props.params?.onSecondsPerBeatChange;
   const audioContainerId = props.params?.audioContainerId;
   const containerId = props.api?.id
     ? `abc-preview-${props.api.id}`
@@ -283,78 +246,26 @@ const PreviewPanel = (
   return (
     <div className="preview-panel">
       <AbcNotationViewer
-        notation={notation}
         containerId={containerId}
         audioContainerId={audioContainerId}
-        onCurrentTimeChange={onCurrentTimeChange}
-        onPlayingChange={onPlayingChange}
-        onNoteEvent={onNoteEvent}
-        onCharTimeMapChange={onCharTimeMapChange}
-        onNoteTimelineChange={onNoteTimelineChange}
-        onSecondsPerBeatChange={onSecondsPerBeatChange}
       />
     </div>
   );
 };
 
-const OtamatoneRollPanel = (
-  props: IDockviewPanelProps<{
-    currentTime: number;
-    isPlaying: boolean;
-    activeNoteEvent?: NotePlaybackEvent | null;
-    noteCharTimes?: NoteCharTimeMap;
-    currentSecondsPerBeat?: number;
-    noteTimeline?: NoteTimeline | null;
-    baselineSecondsPerBeat?: number;
-    lowestNoteHz?: number;
-    highestNoteHz?: number;
-  }>
-) => {
-  const currentTime = props.params?.currentTime || 0;
-  const isPlaying = props.params?.isPlaying || false;
-  const activeNoteEvent = props.params?.activeNoteEvent;
-  const noteCharTimes = props.params?.noteCharTimes;
-  const currentSecondsPerBeat = props.params?.currentSecondsPerBeat;
-  const noteTimeline = props.params?.noteTimeline;
-  const baselineSecondsPerBeat = props.params?.baselineSecondsPerBeat;
-  const lowestNoteHz = props.params?.lowestNoteHz;
-  const highestNoteHz = props.params?.highestNoteHz;
-
+/**
+ * Otamatone Roll panel - uses OtamatoneRoll which reads from store
+ */
+const OtamatoneRollPanel = () => {
   return (
     <div className="otamatone-roll-panel">
-      <OtamatoneRoll
-        currentTime={currentTime}
-        isPlaying={isPlaying}
-        activeNoteEvent={activeNoteEvent}
-        noteCharTimes={noteCharTimes}
-        currentSecondsPerBeat={currentSecondsPerBeat}
-        noteTimeline={noteTimeline}
-        baselineSecondsPerBeat={baselineSecondsPerBeat}
-        lowestNoteHz={lowestNoteHz}
-        highestNoteHz={highestNoteHz}
-      />
+      <OtamatoneRoll />
     </div>
   );
 };
 
 export const DockviewLayout = ({
-  notation,
-  onNotationChange,
-  currentTime,
-  isPlaying,
   audioContainerId,
-  onCurrentTimeChange,
-  onPlayingChange,
-  onNoteEvent,
-  activeNoteEvent,
-  noteCharTimes,
-  onCharTimeMapChange,
-  noteTimeline,
-  onNoteTimelineChange,
-  currentSecondsPerBeat,
-  onSecondsPerBeatChange,
-  lowestNoteHz,
-  highestNoteHz,
 }: DockviewLayoutProps) => {
   const [dockview, setDockview] = useState<DockviewApi | null>(null);
   const [panelVisibility, setPanelVisibility] = useState<PanelVisibility>(
@@ -416,64 +327,43 @@ export const DockviewLayout = ({
     [] // No dependencies - uses ref internally
   );
 
+  // Panel configurations - much simpler now since components read from store
+  const panelConfigs: Record<
+    keyof PanelVisibility,
+    {
+      id: string;
+      component: string;
+      title: string;
+      params: Record<string, unknown>;
+      initialWidth: number;
+    }
+  > = {
+    editor: {
+      id: 'editor-panel',
+      component: 'editor',
+      title: 'Editor',
+      params: {}, // AbcEditor reads from store
+      initialWidth: 280,
+    },
+    preview: {
+      id: 'preview-panel',
+      component: 'preview',
+      title: 'Preview',
+      params: { audioContainerId }, // Only need to pass containerId
+      initialWidth: 520,
+    },
+    otamatoneRoll: {
+      id: 'otamatone-roll-panel',
+      component: 'otamatoneRoll',
+      title: 'Otamatone Roll',
+      params: {}, // OtamatoneRoll reads from store
+      initialWidth: 520,
+    },
+  };
+
   // Sync panel visibility with dockview using group.api.setVisible()
   useEffect(() => {
     if (!dockview) return;
-
-    const panelConfigs: Record<
-      keyof PanelVisibility,
-      {
-        id: string;
-        component: string;
-        title: string;
-        getParams: () => Record<string, unknown>;
-        initialWidth: number;
-      }
-    > = {
-      editor: {
-        id: 'editor-panel',
-        component: 'editor',
-        title: 'Editor',
-        getParams: () => ({
-          notation,
-          onChange: onNotationChange,
-        }),
-        initialWidth: 280,
-      },
-      preview: {
-        id: 'preview-panel',
-        component: 'preview',
-        title: 'Preview',
-        getParams: () => ({
-          notation,
-          onCurrentTimeChange,
-          onPlayingChange,
-          onNoteEvent,
-          onCharTimeMapChange,
-          onNoteTimelineChange,
-          onSecondsPerBeatChange,
-          audioContainerId,
-        }),
-        initialWidth: 520,
-      },
-      otamatoneRoll: {
-        id: 'otamatone-roll-panel',
-        component: 'otamatoneRoll',
-        title: 'Otamatone Roll',
-        getParams: () => ({
-          currentTime,
-          isPlaying,
-          activeNoteEvent,
-          noteCharTimes,
-          currentSecondsPerBeat,
-          noteTimeline,
-          baselineSecondsPerBeat: currentSecondsPerBeat,
-          lowestNoteHz,
-          highestNoteHz,
-        }),
-        initialWidth: 520,
-      },
-    };
 
     const panelOrder: Array<keyof PanelVisibility> = [
       'editor',
@@ -534,33 +424,14 @@ export const DockviewLayout = ({
           id: config.id,
           component: config.component,
           title: config.title,
-          params: config.getParams(),
+          params: config.params,
           initialWidth: config.initialWidth,
           ...(positionConfig && { position: positionConfig }),
         });
       }
     });
-  }, [
-    dockview,
-    panelVisibility,
-    notation,
-    onNotationChange,
-    currentTime,
-    isPlaying,
-    onCurrentTimeChange,
-    onPlayingChange,
-    onNoteEvent,
-    activeNoteEvent,
-    noteCharTimes,
-    onCharTimeMapChange,
-    noteTimeline,
-    onNoteTimelineChange,
-    currentSecondsPerBeat,
-    onSecondsPerBeatChange,
-    audioContainerId,
-    lowestNoteHz,
-    highestNoteHz,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dockview, panelVisibility, audioContainerId]);
 
   const onReady = useCallback(
     (event: DockviewReadyEvent) => {
@@ -571,6 +442,11 @@ export const DockviewLayout = ({
       if (storedLayout) {
         try {
           event.api.fromJSON(storedLayout);
+          // After restoring, update the preview panel's audioContainerId
+          const previewPanel = event.api.getPanel('preview-panel');
+          if (previewPanel) {
+            previewPanel.api.updateParameters({ audioContainerId });
+          }
         } catch (error) {
           console.warn(
             'Failed to restore dockview layout, falling back to default',
@@ -592,10 +468,7 @@ export const DockviewLayout = ({
           id: 'editor-panel',
           component: 'editor',
           title: 'Editor',
-          params: {
-            notation,
-            onChange: onNotationChange,
-          },
+          params: {},
           initialWidth: 280,
         });
 
@@ -607,16 +480,7 @@ export const DockviewLayout = ({
             referencePanel: 'editor-panel',
             direction: 'right',
           },
-          params: {
-            notation,
-            onCurrentTimeChange,
-            onPlayingChange,
-            onNoteEvent,
-            onCharTimeMapChange,
-            onNoteTimelineChange,
-            onSecondsPerBeatChange,
-            audioContainerId,
-          },
+          params: { audioContainerId },
           initialWidth: 520,
         });
 
@@ -625,103 +489,13 @@ export const DockviewLayout = ({
           component: 'otamatoneRoll',
           title: 'Otamatone Roll',
           position: { referencePanel: 'preview-panel', direction: 'right' },
-          params: {
-            currentTime,
-            isPlaying,
-            activeNoteEvent,
-            noteCharTimes,
-            currentSecondsPerBeat,
-            noteTimeline,
-            baselineSecondsPerBeat: currentSecondsPerBeat,
-            lowestNoteHz,
-            highestNoteHz,
-          },
+          params: {},
           initialWidth: 520,
         });
       }
     },
-    [
-      notation,
-      onNotationChange,
-      currentTime,
-      isPlaying,
-      onCurrentTimeChange,
-      onPlayingChange,
-      onNoteEvent,
-      activeNoteEvent,
-      noteCharTimes,
-      onCharTimeMapChange,
-      noteTimeline,
-      onNoteTimelineChange,
-      currentSecondsPerBeat,
-      onSecondsPerBeatChange,
-      audioContainerId,
-      lowestNoteHz,
-      highestNoteHz,
-    ]
+    [audioContainerId]
   );
-
-  // Update panel params when props change
-  useEffect(() => {
-    if (!dockview) return;
-
-    const editorPanel = dockview.getPanel('editor-panel');
-    const previewPanel = dockview.getPanel('preview-panel');
-    const otamatoneRollPanel = dockview.getPanel('otamatone-roll-panel');
-
-    if (editorPanel) {
-      editorPanel.api.updateParameters({
-        notation,
-        onChange: onNotationChange,
-      });
-    }
-
-    if (previewPanel) {
-      previewPanel.api.updateParameters({
-        notation,
-        onCurrentTimeChange,
-        onPlayingChange,
-        onNoteEvent,
-        onCharTimeMapChange,
-        onNoteTimelineChange,
-        onSecondsPerBeatChange,
-        audioContainerId,
-      });
-    }
-
-    if (otamatoneRollPanel) {
-      otamatoneRollPanel.api.updateParameters({
-        currentTime,
-        isPlaying,
-        activeNoteEvent,
-        noteCharTimes,
-        currentSecondsPerBeat,
-        noteTimeline,
-        baselineSecondsPerBeat: currentSecondsPerBeat,
-        lowestNoteHz,
-        highestNoteHz,
-      });
-    }
-  }, [
-    dockview,
-    notation,
-    onNotationChange,
-    currentTime,
-    isPlaying,
-    onCurrentTimeChange,
-    onPlayingChange,
-    onNoteEvent,
-    activeNoteEvent,
-    noteCharTimes,
-    onCharTimeMapChange,
-    noteTimeline,
-    onNoteTimelineChange,
-    currentSecondsPerBeat,
-    onSecondsPerBeatChange,
-    audioContainerId,
-    lowestNoteHz,
-    highestNoteHz,
-  ]);
 
   const components = {
     editor: EditorPanel,
