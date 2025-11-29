@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { DEFAULT_SECONDS_PER_BEAT } from '../hooks/useOtamatoneRollNotes';
 import {
-  useOtamatoneRollNotes,
-  DEFAULT_SECONDS_PER_BEAT,
-} from '../hooks/useOtamatoneRollNotes';
-import { NoteCharTimeMap, NotePlaybackEvent } from '../types/music';
+  NoteCharTimeMap,
+  NotePlaybackEvent,
+  NoteTimeline,
+} from '../types/music';
 import {
   DEFAULT_HIGHEST_MIDI,
   DEFAULT_LOWEST_MIDI,
@@ -21,7 +22,10 @@ interface OtamatoneRollProps {
   noteCharTimes?: NoteCharTimeMap;
   /** Current playback tempo - may change with warp/speed controls */
   currentSecondsPerBeat?: number;
-  notation?: string;
+  /** The note timeline from the ABC notation (single source of truth) */
+  noteTimeline?: NoteTimeline | null;
+  /** Baseline seconds per beat from the ABC notation */
+  baselineSecondsPerBeat?: number;
   lowestNoteHz?: number;
   highestNoteHz?: number;
 }
@@ -96,21 +100,25 @@ export const OtamatoneRoll: React.FC<OtamatoneRollProps> = ({
   activeNoteEvent = null,
   noteCharTimes,
   currentSecondsPerBeat,
-  notation = '',
+  noteTimeline,
+  baselineSecondsPerBeat,
   lowestNoteHz,
   highestNoteHz,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
 
-  // Get the beat-based timeline (invariant to tempo changes)
-  const {
-    notes,
-    totalBeats,
-    secondsPerBeat: baselineSecondsPerBeat,
-    measureBoundaries = [] as number[],
-    beatBoundaries = [] as number[],
-  } = useOtamatoneRollNotes(notation);
+  // Extract timeline data from the passed noteTimeline prop (single source of truth)
+  const notes = useMemo(() => noteTimeline?.notes ?? [], [noteTimeline?.notes]);
+  const totalBeats = noteTimeline?.totalBeats ?? 0;
+  const measureBoundaries = useMemo(
+    () => noteTimeline?.measureBoundaries ?? [],
+    [noteTimeline?.measureBoundaries]
+  );
+  const beatBoundaries = useMemo(
+    () => noteTimeline?.beatBoundaries ?? [],
+    [noteTimeline?.beatBoundaries]
+  );
 
   // Use current playback tempo if provided, otherwise use baseline
   const effectiveSecondsPerBeat =

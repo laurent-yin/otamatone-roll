@@ -131,7 +131,8 @@ const OtamatoneRollPanel = (
     activeNoteEvent?: NotePlaybackEvent | null;
     noteCharTimes?: NoteCharTimeMap;
     currentSecondsPerBeat?: number;
-    notation?: string;
+    noteTimeline?: NoteTimeline | null;
+    baselineSecondsPerBeat?: number;
     lowestNoteHz?: number;
     highestNoteHz?: number;
   }>
@@ -141,7 +142,8 @@ const OtamatoneRollPanel = (
   const activeNoteEvent = props.params?.activeNoteEvent;
   const noteCharTimes = props.params?.noteCharTimes;
   const currentSecondsPerBeat = props.params?.currentSecondsPerBeat;
-  const notation = props.params?.notation || '';
+  const noteTimeline = props.params?.noteTimeline;
+  const baselineSecondsPerBeat = props.params?.baselineSecondsPerBeat;
   const lowestNoteHz = props.params?.lowestNoteHz;
   const highestNoteHz = props.params?.highestNoteHz;
 
@@ -153,7 +155,8 @@ const OtamatoneRollPanel = (
         activeNoteEvent={activeNoteEvent}
         noteCharTimes={noteCharTimes}
         currentSecondsPerBeat={currentSecondsPerBeat}
-        notation={notation}
+        noteTimeline={noteTimeline}
+        baselineSecondsPerBeat={baselineSecondsPerBeat}
         lowestNoteHz={lowestNoteHz}
         highestNoteHz={highestNoteHz}
       />
@@ -292,7 +295,8 @@ export const DockviewLayout = ({
           activeNoteEvent,
           noteCharTimes,
           currentSecondsPerBeat,
-          notation,
+          noteTimeline,
+          baselineSecondsPerBeat: currentSecondsPerBeat,
           lowestNoteHz,
           highestNoteHz,
         },
@@ -410,7 +414,8 @@ export const DockviewLayout = ({
         activeNoteEvent,
         noteCharTimes,
         currentSecondsPerBeat,
-        notation,
+        noteTimeline,
+        baselineSecondsPerBeat: currentSecondsPerBeat,
         lowestNoteHz,
         highestNoteHz,
       });
