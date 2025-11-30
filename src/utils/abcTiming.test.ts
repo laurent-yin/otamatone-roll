@@ -4,6 +4,7 @@ import {
   TimingEvent,
   VisualObjWithTimings,
 } from './abcTiming';
+import { getBeatBoundaries } from '../types/music';
 
 /**
  * Helper to create partial mock objects for testing.
@@ -91,7 +92,7 @@ describe('buildTimingDerivedData', () => {
     expect(thirdNote).toMatchObject({ pitch: 67, startBeat: 2.5 });
     expect(timeline.totalBeats).toBeCloseTo(3); // 2.5 + 0.5
     expect(timeline.measureBoundaries).toEqual([]);
-    expect(timeline.beatBoundaries).toEqual([1, 2]); // beats at 1, 2 (not 0 or >= 3)
+    expect(getBeatBoundaries(timeline.totalBeats)).toEqual([1, 2]); // beats at 1, 2 (not 0 or >= 3)
   });
 
   it('derives timing from beat-based pitchInfo data when milliseconds are missing', () => {
@@ -129,7 +130,7 @@ describe('buildTimingDerivedData', () => {
     expect(note.durationBeats).toBeCloseTo(2); // 0.5 whole notes * 4 beats/whole
     expect(timeline.totalBeats).toBeCloseTo(8); // 6 + 2
     expect(timeline.measureBoundaries).toEqual([3, 6]); // 3 beats per measure
-    expect(timeline.beatBoundaries?.[0]).toBeCloseTo(1);
+    expect(getBeatBoundaries(timeline.totalBeats)[0]).toBeCloseTo(1);
   });
 
   it('records measure boundaries from bar events when provided (in beats)', () => {
@@ -154,7 +155,7 @@ describe('buildTimingDerivedData', () => {
     const { timeline } = buildTimingDerivedData(baseVisualObj, timings);
 
     expect(timeline.measureBoundaries).toEqual([4, 8]); // in beats now
-    expect(timeline.beatBoundaries).toEqual([1, 2, 3, 4, 5]); // beats 1-5 (not 0 or >= 6)
+    expect(getBeatBoundaries(timeline.totalBeats)).toEqual([1, 2, 3, 4, 5]); // beats 1-5 (not 0 or >= 6)
   });
 
   it('derives measure boundaries from barNumber increments when bar events are absent', () => {
@@ -185,6 +186,6 @@ describe('buildTimingDerivedData', () => {
     const { timeline } = buildTimingDerivedData(baseVisualObj, timings);
 
     expect(timeline.measureBoundaries).toEqual([1, 3]); // in beats
-    expect(timeline.beatBoundaries).toEqual([1, 2, 3]); // beats 1-3
+    expect(getBeatBoundaries(timeline.totalBeats)).toEqual([1, 2, 3]); // beats 1-3
   });
 });

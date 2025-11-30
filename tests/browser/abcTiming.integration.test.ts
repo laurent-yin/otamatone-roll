@@ -4,6 +4,7 @@ import {
   buildTimingDerivedData,
   VisualObjWithTimings,
 } from '../../src/utils/abcTiming';
+import { getBeatBoundaries } from '../../src/types/music';
 
 type VisualObjWithOptionalAudio = VisualObjWithTimings & {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -76,7 +77,9 @@ C _D D _E | E F _G G |
 
     // Beat boundaries should be integer beats (0, 1, 2, 3, 4, 5, 6, 7)
     // but we don't include beat 0 or the final beat
-    expect(derived.timeline.beatBoundaries).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(getBeatBoundaries(derived.timeline.totalBeats)).toEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
   });
 
   it('respects pickup measures when deriving boundaries (beat-based)', () => {
@@ -105,7 +108,7 @@ abcd || e4- eedf- | f2
     expect(boundaries).toEqual([1, 3]);
 
     // Beat boundaries in beats (starting from beat 1)
-    expect(derived.timeline.beatBoundaries).toEqual([1, 2, 3]);
+    expect(getBeatBoundaries(derived.timeline.totalBeats)).toEqual([1, 2, 3]);
   });
 
   it('identifies the top pitch for the Dm chord example', () => {

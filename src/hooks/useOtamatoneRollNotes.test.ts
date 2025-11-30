@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import abcjs from 'abcjs';
 import { TimingEvent } from '../utils/abcTiming';
+import { getBeatBoundaries } from '../types/music';
 import {
   DEFAULT_SECONDS_PER_BEAT,
   buildTimelineFromNotation,
@@ -102,7 +103,7 @@ describe('buildTimelineFromNotation', () => {
     expect(timeline.secondsPerBeat).toBeCloseTo(0.5); // 60/120 = 0.5
 
     // Beat boundaries start at 1 (no marker needed at beat 0)
-    expect(timeline.beatBoundaries).toEqual([1, 2]);
+    expect(getBeatBoundaries(timeline.totalBeats)).toEqual([1, 2]);
   });
 
   it('handles notation with explicit tempo', () => {

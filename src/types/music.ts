@@ -25,8 +25,16 @@ export interface NoteTimeline {
   totalBeats: number; // total duration in beats
   beatsPerMeasure?: number; // e.g., 4 for 4/4 time
   measureBoundaries?: number[]; // in beats
-  beatBoundaries?: number[]; // in beats (0, 1, 2, 3, ...)
 }
+
+/**
+ * Generate beat boundaries (1, 2, 3, ...) from totalBeats.
+ * These are just integer beat markers, no need to store them.
+ */
+export const getBeatBoundaries = (totalBeats: number): number[] =>
+  Array.from({ length: Math.floor(totalBeats) }, (_, i) => i + 1).filter(
+    (beat) => beat < totalBeats - 1e-4
+  );
 
 export interface NotePlaybackEvent {
   sequenceId: number;

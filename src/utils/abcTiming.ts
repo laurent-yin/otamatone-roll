@@ -300,12 +300,6 @@ export const buildTimingDerivedData = (
     }
   }
 
-  // Generate beat boundaries (simple sequence: 1, 2, 3, ...)
-  const beatBoundaries: number[] = [];
-  for (let beat = 1; beat < maxEndBeats - 1e-4; beat += 1) {
-    beatBoundaries.push(beat);
-  }
-
   if (typeof console !== 'undefined' && typeof console.debug === 'function') {
     console.debug('[abcTiming] timeline summary (beats)', {
       totalBeats: Number(maxEndBeats.toFixed(4)),
@@ -326,7 +320,6 @@ export const buildTimingDerivedData = (
       totalBeats: maxEndBeats,
       beatsPerMeasure,
       measureBoundaries,
-      beatBoundaries,
     },
     secondsPerBeat,
   };

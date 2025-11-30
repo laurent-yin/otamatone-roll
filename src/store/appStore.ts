@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { devtools, persist } from 'zustand/middleware';
 import {
   NoteCharTimeMap,
   NotePlaybackEvent,
@@ -55,71 +55,80 @@ interface PersistedState {
 }
 
 export const useAppStore = create<AppState>()(
-  persist(
-    (set, get) => ({
-      // ABC notation
-      notation: DEFAULT_ABC_NOTATION,
-      setNotation: (notation) => set({ notation }),
+  devtools(
+    persist(
+      (set, get) => ({
+        // ABC notation
+        notation: DEFAULT_ABC_NOTATION,
+        setNotation: (notation) => set({ notation }),
 
-      // Playback state
-      currentTime: 0,
-      setCurrentTime: (currentTime) => set({ currentTime }),
-      isPlaying: false,
-      setIsPlaying: (isPlaying) => set({ isPlaying }),
+        // Playback state
+        currentTime: 0,
+        setCurrentTime: (currentTime) => set({ currentTime }),
+        isPlaying: false,
+        setIsPlaying: (isPlaying) => set({ isPlaying }),
 
-      // Active note event
-      activeNoteEvent: null,
-      setActiveNoteEvent: (activeNoteEvent) => set({ activeNoteEvent }),
+        // Active note event
+        activeNoteEvent: null,
+        setActiveNoteEvent: (activeNoteEvent) => set({ activeNoteEvent }),
 
-      // Note timing data
-      noteCharTimes: {},
-      setNoteCharTimes: (noteCharTimes) => set({ noteCharTimes }),
-      noteTimeline: null,
-      setNoteTimeline: (noteTimeline) => set({ noteTimeline }),
+        // Note timing data
+        noteCharTimes: {},
+        setNoteCharTimes: (noteCharTimes) => set({ noteCharTimes }),
+        noteTimeline: null,
+        setNoteTimeline: (noteTimeline) => set({ noteTimeline }),
 
-      // Tempo
-      currentSecondsPerBeat: undefined,
-      setCurrentSecondsPerBeat: (currentSecondsPerBeat) =>
-        set({ currentSecondsPerBeat }),
+        // Tempo
+        currentSecondsPerBeat: undefined,
+        setCurrentSecondsPerBeat: (currentSecondsPerBeat) =>
+          set({ currentSecondsPerBeat }),
 
-      // Frequency range
-      lowestNoteHz: DEFAULT_LOWEST_FREQUENCY,
-      setLowestNoteHz: (lowestNoteHz) => set({ lowestNoteHz }),
+        // Frequency range
+        lowestNoteHz: DEFAULT_LOWEST_FREQUENCY,
+        setLowestNoteHz: (lowestNoteHz) => set({ lowestNoteHz }),
 
-      highestNoteHz: DEFAULT_HIGHEST_FREQUENCY,
-      setHighestNoteHz: (highestNoteHz) => set({ highestNoteHz }),
+        highestNoteHz: DEFAULT_HIGHEST_FREQUENCY,
+        setHighestNoteHz: (highestNoteHz) => set({ highestNoteHz }),
 
-      // Computed values
-      getSanitizedLowestNoteHz: () => {
-        const { lowestNoteHz } = get();
-        if (!Number.isFinite(lowestNoteHz) || lowestNoteHz <= 0) {
-          return DEFAULT_LOWEST_FREQUENCY;
-        }
-        return lowestNoteHz;
-      },
+        // Computed values
+        getSanitizedLowestNoteHz: () => {
+          const { lowestNoteHz } = get();
+          if (!Number.isFinite(lowestNoteHz) || lowestNoteHz <= 0) {
+            return DEFAULT_LOWEST_FREQUENCY;
+          }
+          return lowestNoteHz;
+        },
 
-      getSanitizedHighestNoteHz: () => {
-        const { highestNoteHz } = get();
-        const sanitizedLowest = get().getSanitizedLowestNoteHz();
-        const fallback = Math.max(
-          DEFAULT_HIGHEST_FREQUENCY,
-          sanitizedLowest + 1
-        );
+        getSanitizedHighestNoteHz: () => {
+          const { highestNoteHz } = get();
+          const sanitizedLowest = get().getSanitizedLowestNoteHz();
+          const fallback = Math.max(
+            DEFAULT_HIGHEST_FREQUENCY,
+            sanitizedLowest + 1
+          );
 
-        if (!Number.isFinite(highestNoteHz) || highestNoteHz <= 0) {
-          return fallback;
-        }
-        return Math.max(highestNoteHz, sanitizedLowest + 1);
-      },
-    }),
-    {
-      name: 'otamatone-roll-storage',
-      // Only persist the minimal state needed to restore the app
-      partialize: (state): PersistedState => ({
-        notation: state.notation,
-        lowestNoteHz: state.lowestNoteHz,
-        highestNoteHz: state.highestNoteHz,
+          if (!Number.isFinite(highestNoteHz) || highestNoteHz <= 0) {
+            return fallback;
+          }
+          return Math.max(highestNoteHz, sanitizedLowest + 1);
+        },
       }),
-    }
+      {
+        name: 'otamatone-roll-storage',
+        // Only persist the minimal state needed to restore the app
+        partialize: (state): PersistedState => ({
+          notation: state.notation,
+          lowestNoteHz: state.lowestNoteHz,
+          highestNoteHz: state.highestNoteHz,
+        }),
+      }
+    ),
+    { name: 'OtamatoneRoll' }
   )
 );
+
+// Expose store for debugging in dev mode
+if (import.meta.env.DEV) {
+  (window as unknown as { appStore: typeof useAppStore }).appStore =
+    useAppStore;
+}

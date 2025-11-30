@@ -45,7 +45,6 @@ const createEmptyTimeline = (): NoteTimeline => ({
   totalBeats: 0,
   beatsPerMeasure: 4,
   measureBoundaries: [],
-  beatBoundaries: [],
 });
 
 const createEmptyResult = (): OtamatoneRollNotesResult => ({

@@ -9,7 +9,7 @@ import {
   stemPosition,
   midiToNoteName,
 } from '../utils/frequency';
-import { NotePlaybackEvent } from '../types/music';
+import { NotePlaybackEvent, getBeatBoundaries } from '../types/music';
 
 const PLAYHEAD_VERTICAL_INSET = 12;
 const PLAYABLE_EDGE_RATIO = 0.03;
@@ -110,8 +110,8 @@ export const OtamatoneRoll: React.FC = () => {
     [noteTimeline?.measureBoundaries]
   );
   const beatBoundaries = useMemo(
-    () => noteTimeline?.beatBoundaries ?? [],
-    [noteTimeline?.beatBoundaries]
+    () => getBeatBoundaries(totalBeats),
+    [totalBeats]
   );
 
   // Use current playback tempo from store

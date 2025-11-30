@@ -1,4 +1,4 @@
-import { NoteTimeline } from '../types/music';
+import { NoteTimeline, getBeatBoundaries } from '../types/music';
 import { midiToFrequency, stemPosition } from './frequency';
 
 const clamp = (value: number, min: number, max: number) => {
@@ -52,9 +52,7 @@ export const buildTimelinePreviewImage = (
   const measureBoundaries = Array.isArray(timeline.measureBoundaries)
     ? timeline.measureBoundaries
     : [];
-  const beatBoundaries = Array.isArray(timeline.beatBoundaries)
-    ? timeline.beatBoundaries
-    : [];
+  const beatBoundaries = getBeatBoundaries(totalBeats);
 
   const minPitch = notes.reduce(
     (acc, note) => Math.min(acc, note.pitch),
