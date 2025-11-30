@@ -54,6 +54,26 @@ interface PersistedState {
   highestNoteHz: number;
 }
 
+/**
+ * Main Zustand store for application state.
+ * Contains ABC notation, playback state, timing data, and display settings.
+ *
+ * State is divided into:
+ * - **Notation**: Current ABC notation string
+ * - **Playback**: currentTime, isPlaying, activeNoteEvent
+ * - **Timing**: noteCharTimes, noteTimeline, currentSecondsPerBeat
+ * - **Display**: lowestNoteHz, highestNoteHz (frequency range for piano roll)
+ *
+ * Persisted to localStorage: notation, lowestNoteHz, highestNoteHz
+ *
+ * @example
+ * // In a component:
+ * const notation = useAppStore((state) => state.notation);
+ * const setNotation = useAppStore((state) => state.setNotation);
+ *
+ * // Outside React:
+ * const { notation, setNotation } = useAppStore.getState();
+ */
 export const useAppStore = create<AppState>()(
   devtools(
     persist(

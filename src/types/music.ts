@@ -28,8 +28,15 @@ export interface NoteTimeline {
 }
 
 /**
- * Generate beat boundaries (1, 2, 3, ...) from totalBeats.
- * These are just integer beat markers, no need to store them.
+ * Generates an array of integer beat boundary positions.
+ * Used for drawing beat grid lines in the piano roll visualization.
+ *
+ * @param totalBeats - Total duration in beats
+ * @returns Array of beat positions (1, 2, 3, ...) up to totalBeats
+ *
+ * @example
+ * getBeatBoundaries(4.5) // [1, 2, 3, 4]
+ * getBeatBoundaries(2) // [1]
  */
 export const getBeatBoundaries = (totalBeats: number): number[] =>
   Array.from({ length: Math.floor(totalBeats) }, (_, i) => i + 1).filter(

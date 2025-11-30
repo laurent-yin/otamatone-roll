@@ -105,8 +105,20 @@ const deriveTimelineFromTimingData = (
 };
 
 /**
- * Build the beat-based timeline from ABC notation.
- * This is computed once and is invariant to tempo changes.
+ * Builds a beat-based timeline directly from ABC notation string.
+ * This is a standalone function (not a hook) for use outside React components.
+ *
+ * Creates a hidden DOM container, renders the ABC notation with abcjs,
+ * extracts timing data, and cleans up. The resulting timeline is
+ * invariant to tempo changes.
+ *
+ * @param notation - ABC notation string
+ * @returns Beat-based timeline with notes, totalBeats, and secondsPerBeat
+ *
+ * @example
+ * const timeline = buildTimelineFromNotation('X:1\nK:C\nCDEF|');
+ * console.log(timeline.notes.length); // 4
+ * console.log(timeline.totalBeats); // 4
  */
 export const buildTimelineFromNotation = (
   notation: string

@@ -76,8 +76,24 @@ const drawRoundedRect = (
 };
 
 /**
- * Otamatone Roll visualization component.
- * Reads all state from the Zustand store - no props needed.
+ * Canvas-based piano roll visualization styled like an otamatone.
+ * Displays notes as horizontal bars scrolling from right to left,
+ * with a vertical "neck" representing the otamatone's stem.
+ *
+ * Features:
+ * - Real-time animation synced to audio playback
+ * - Beat and measure grid lines
+ * - Active note highlighting
+ * - Pitch labels on the left side
+ * - Frequency range determined by store settings
+ *
+ * All state is read from the Zustand store:
+ * - noteTimeline: The notes to display
+ * - currentTime/isPlaying: Playback position
+ * - lowestNoteHz/highestNoteHz: Vertical display range
+ *
+ * @example
+ * <OtamatoneRoll />
  */
 export const OtamatoneRoll: React.FC = () => {
   // Read state from store

@@ -15,6 +15,22 @@ const DEFAULT_PREVIEW_HEIGHT = 120;
 const FALLBACK_MIN_FREQUENCY = midiToFrequency(36);
 const FALLBACK_MAX_FREQUENCY = midiToFrequency(84);
 
+/**
+ * Generates a PNG data URL preview image of the note timeline.
+ * Used to display a minimap in the audio progress bar.
+ *
+ * @param timeline - The beat-based note timeline to visualize
+ * @param options - Rendering options
+ * @param options.width - Image width in CSS pixels (default: 960)
+ * @param options.height - Image height in CSS pixels (default: 120)
+ * @param options.minFrequency - Minimum frequency in Hz for vertical range
+ * @param options.maxFrequency - Maximum frequency in Hz for vertical range
+ * @returns Data URL string ("data:image/png;base64,...") or null if rendering fails
+ *
+ * @example
+ * const dataUrl = buildTimelinePreviewImage(timeline, { width: 800, height: 100 });
+ * if (dataUrl) element.style.backgroundImage = `url(${dataUrl})`;
+ */
 export const buildTimelinePreviewImage = (
   timeline: NoteTimeline | null | undefined,
   options?: {

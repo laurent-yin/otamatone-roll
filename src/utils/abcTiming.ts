@@ -39,7 +39,10 @@ const BEATS_PER_QUARTER_NOTE = 1;
 const QUARTER_NOTES_PER_WHOLE = 4;
 /** Default BPM when not specified */
 const DEFAULT_BPM = 120;
-/** Default seconds per beat at 120 BPM */
+/**
+ * Default seconds per beat at 120 BPM.
+ * Used as fallback when tempo cannot be determined from ABC notation.
+ */
 export const DEFAULT_SECONDS_PER_BEAT = 60 / DEFAULT_BPM;
 
 /**
@@ -123,8 +126,26 @@ const getSecondsPerBeat = (
 };
 
 /**
- * Build beat-based timeline from ABC timing events.
- * The resulting timeline is invariant to tempo changes.
+ * Builds beat-based timeline data from ABC notation timing events.
+ * This is the core function that transforms abcjs timing callbacks into
+ * a tempo-invariant musical timeline.
+ *
+ * The resulting timeline stores all timing in beats (not seconds), making it
+ * independent of tempo changes. The `secondsPerBeat` value can be used to
+ * convert to real time for playback.
+ *
+ * @param visualObj - The abcjs TuneObject (from renderAbc)
+ * @param timings - Array of timing events from abcjs TimingCallbacks
+ * @param options - Optional configuration
+ * @param options.secondsPerBeat - Override tempo (seconds per beat)
+ * @returns Derived timing data including charMap, timeline, and tempo
+ *
+ * @example
+ * const visualObjs = abcjs.renderAbc('container', notation);
+ * const timingCallbacks = new abcjs.TimingCallbacks(visualObjs[0], {});
+ * const derived = buildTimingDerivedData(visualObjs[0], timingCallbacks.noteTimings);
+ * console.log(derived.timeline.notes); // Beat-based notes
+ * console.log(derived.secondsPerBeat); // Tempo for playback conversion
  */
 export const buildTimingDerivedData = (
   visualObj: VisualObjWithTimings,

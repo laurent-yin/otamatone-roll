@@ -264,6 +264,21 @@ const OtamatoneRollPanel = () => {
   );
 };
 
+/**
+ * Main layout component using Dockview for resizable, rearrangeable panels.
+ * Contains three panels: Editor, Preview (sheet music), and Otamatone Roll.
+ *
+ * Features:
+ * - Panels can be resized, moved, and hidden via the View menu
+ * - Layout is persisted to localStorage
+ * - Panel visibility state is separate from layout (allows hide/show without losing position)
+ *
+ * @param props - Component props
+ * @param props.audioContainerId - DOM element ID where audio controls should be rendered
+ *
+ * @example
+ * <DockviewLayout audioContainerId="audio-controls" />
+ */
 export const DockviewLayout = ({ audioContainerId }: DockviewLayoutProps) => {
   const [dockview, setDockview] = useState<DockviewApi | null>(null);
   const [panelVisibility, setPanelVisibility] = useState<PanelVisibility>(

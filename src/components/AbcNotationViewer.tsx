@@ -7,8 +7,24 @@ interface AbcNotationViewerProps {
 }
 
 /**
- * Renders ABC notation from the store and manages playback.
- * All state is read/written through the Zustand store - no callback props needed.
+ * Sheet music renderer component using abcjs.
+ * Reads ABC notation from the Zustand store and renders it as SVG.
+ * Optionally displays audio playback controls.
+ *
+ * All playback state (currentTime, isPlaying, noteTimeline) is synced
+ * back to the Zustand store via the useAbcRenderer hook.
+ *
+ * @param props - Component props
+ * @param props.containerId - DOM element ID for the notation SVG (default: "abc-notation-container")
+ * @param props.audioContainerId - External DOM element ID for audio controls (optional)
+ * @param props.showAudioControls - Whether to render audio controls (default: true)
+ *
+ * @example
+ * // With external audio controls:
+ * <AbcNotationViewer containerId="sheet" audioContainerId="audio" />
+ *
+ * // With built-in audio controls:
+ * <AbcNotationViewer containerId="sheet" showAudioControls />
  */
 export const AbcNotationViewer = ({
   containerId = 'abc-notation-container',

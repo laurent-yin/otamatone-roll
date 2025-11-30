@@ -11,9 +11,27 @@ interface UseAbcRendererProps {
 }
 
 /**
- * Hook that renders ABC notation and manages playback.
- * Reads notation from the store and writes playback state back to the store.
- * No more callback props needed - everything goes through Zustand.
+ * Hook that renders ABC notation and manages audio playback.
+ * Reads notation from the Zustand store and writes playback state back.
+ *
+ * This hook:
+ * - Creates an AbcPlaybackController when notation changes
+ * - Renders sheet music to the specified container
+ * - Sets up audio controls if audioContainerId is provided
+ * - Syncs timing events (currentTime, isPlaying, noteTimeline) to the store
+ *
+ * @param props - Hook configuration
+ * @param props.containerId - DOM element ID where notation will be rendered
+ * @param props.audioContainerId - DOM element ID for audio controls (optional)
+ *
+ * @example
+ * const MyComponent = () => {
+ *   useAbcRenderer({
+ *     containerId: 'sheet-music',
+ *     audioContainerId: 'audio-controls',
+ *   });
+ *   return <div id="sheet-music" />;
+ * };
  */
 export const useAbcRenderer = ({
   containerId,

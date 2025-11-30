@@ -2,8 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { useAppStore } from '../store/appStore';
 
 /**
- * ABC notation editor that reads/writes to the Zustand store.
- * Uses local state + debouncing to avoid re-renders on every keystroke.
+ * ABC notation text editor component.
+ * Reads initial value from Zustand store and debounces updates (300ms)
+ * to avoid excessive re-renders during typing.
+ *
+ * Features:
+ * - Auto-resizes textarea to fit content
+ * - Syncs with external store changes
+ * - Debounced updates for performance
+ *
+ * @example
+ * <AbcEditor />
  */
 export const AbcEditor = () => {
   const notation = useAppStore((state) => state.notation);

@@ -80,6 +80,17 @@ type TimingCallbacksInternal = {
   pause?: () => void;
 };
 
+/**
+ * Normalizes MIDI pitch data from various abcjs event formats into a clean array.
+ * Handles both direct number arrays and object arrays with pitch/midi properties.
+ *
+ * @param input - Raw pitch data from abcjs timing event (may be array of numbers or objects)
+ * @returns Array of valid MIDI note numbers (0-127)
+ *
+ * @example
+ * normalizeMidiPitches([60, 64, 67]) // [60, 64, 67]
+ * normalizeMidiPitches([{ pitch: 60 }, { midi: 64 }]) // [60, 64]
+ */
 export const normalizeMidiPitches = (input: unknown): number[] => {
   if (!Array.isArray(input)) {
     return [];
@@ -103,6 +114,24 @@ export const normalizeMidiPitches = (input: unknown): number[] => {
     .filter((value): value is number => value !== undefined);
 };
 
+/**
+ * Controller class that manages ABC notation rendering and audio playback.
+ * Integrates with abcjs to provide synchronized playback with timing callbacks.
+ *
+ * @example
+ * const controller = new AbcPlaybackController({
+ *   notation: 'X:1\nT:Test\nK:C\nCDEF|',
+ *   containerId: 'notation-container',
+ *   audioContainerId: 'audio-controls',
+ *   callbacks: {
+ *     onCurrentTimeChange: (time) => console.log('Time:', time),
+ *     onNoteTimelineChange: (timeline) => console.log('Notes:', timeline),
+ *   },
+ * });
+ *
+ * // When done:
+ * controller.dispose();
+ */
 export class AbcPlaybackController {
   private readonly notation: string;
   private readonly containerId: string;
