@@ -329,16 +329,13 @@ export class AbcPlaybackController {
 
     const derived = buildTimingDerivedData(
       this.visualObj,
-      timings as TimingEvent[],
-      {
-        secondsPerBeat: this.getSecondsPerBeat(),
-      }
+      timings as TimingEvent[]
     );
 
     console.log(`${logPrefix} Derived timeline`, {
       notes: derived.timeline.notes.length,
-      totalBeats: derived.timeline.totalBeats,
-      secondsPerBeat: derived.secondsPerBeat,
+      totalSubdivisions: derived.timeline.totalSubdivisions,
+      secondsPerSubdivision: derived.secondsPerSubdivision,
     });
 
     // Emit the current tempo
@@ -358,18 +355,6 @@ export class AbcPlaybackController {
       });
       this.callbacks.onNoteTimelineChange?.(derived.timeline);
     }
-  }
-
-  private getSecondsPerBeat(): number | undefined {
-    if (!this.timingCallbacks) {
-      return undefined;
-    }
-
-    const qpm = this.timingCallbacks.qpm;
-    if (typeof qpm === 'number' && qpm > 0) {
-      return 60 / qpm;
-    }
-    return undefined;
   }
 
   private setupAudioControls() {
