@@ -60,13 +60,6 @@ const createEmptyResult = (): OtamatoneRollNotesResult => ({
   secondsPerBeat: DEFAULT_SECONDS_PER_BEAT, // deprecated alias
 });
 
-const extractSecondsPerSubdivision = (qpm?: number): number | undefined => {
-  if (typeof qpm === 'number' && Number.isFinite(qpm) && qpm > 0) {
-    return 60 / qpm;
-  }
-  return undefined;
-};
-
 const createHiddenContainer = () => {
   const container = document.createElement('div');
   container.style.position = 'absolute';
@@ -109,9 +102,10 @@ const deriveTimelineFromTimingData = (
       secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
     };
   }
-  return buildTimingDerivedData(visualObj, timings, {
-    secondsPerSubdivision: extractSecondsPerSubdivision(callbacks.qpm),
-  });
+  // NOTE: We intentionally don't pass secondsPerSubdivision here.
+  // buildTimingDerivedData will use millisecondsPerMeasure() which is precise.
+  // Do NOT use callbacks.qpm - it may be derived from abcjs's rounded currentTempo.
+  return buildTimingDerivedData(visualObj, timings);
 };
 
 /**

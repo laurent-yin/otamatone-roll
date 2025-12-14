@@ -127,14 +127,15 @@ const getSubdivisionsPerBeat = (
  * abcjs behavior:
  * - `visualObj.millisecondsPerMeasure()` always returns the original tempo
  * - This value does NOT change when setWarp() is called
- * - For real-time playback sync, use `synthControl.currentTempo` instead
+ * - `synthControl.currentTempo` is ROUNDED to an integer - DO NOT USE for calculations!
+ * - For real-time playback sync, calculate precise tempo from millisecondsPerMeasure() and warp
  *
  * This function is appropriate for:
  * - Building the initial timeline (which is tempo-invariant)
  * - Getting the base tempo before any warp is applied
  *
  * This function is NOT appropriate for:
- * - Converting real-time playback position to subdivisions (use currentTempo)
+ * - Converting real-time playback position to subdivisions (use precise calculation)
  */
 const getSecondsPerSubdivision = (
   visualObj: VisualObjWithTimings,

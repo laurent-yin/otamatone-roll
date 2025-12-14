@@ -101,8 +101,8 @@ type SynthControllerLike = {
   restart?: () => void;
   seek?: (percent: number, units?: number | string) => void;
   setWarp?: (warp: number) => Promise<unknown>;
-  /** Current tempo in QPM - rounded by abcjs, used only for display */
-  currentTempo?: number;
+  // NOTE: currentTempo exists on abcjs runtime but is intentionally NOT included here.
+  // It is ROUNDED to an integer and causes sync drift. Use calculatePreciseQpm() instead.
   /** Warp percentage (100 = normal, 50 = half speed). Used for precise tempo calculation */
   warp?: number;
   percent?: number;
@@ -112,10 +112,17 @@ type SynthControllerLike = {
 /**
  * Internal interface for TimingCallbacks instance with properties
  * used for playback synchronization.
+ *
+ * WARNING: The qpm property should only be set using precise calculations,
+ * never from synthControl.currentTempo (which is rounded).
  */
 type TimingCallbacksInternal = {
   noteTimings?: TimingEvent[];
   replaceTarget?: (target: VisualObjWithTimings) => void;
+  /**
+   * Quarter notes per minute for timing calculations.
+   * WARNING: Only set this using calculatePreciseQpm(), never from currentTempo!
+   */
   qpm?: number;
   setProgress?: (percent: number, units?: number | string) => void;
   start?: (offsetPercent?: number) => void;
@@ -416,7 +423,6 @@ export class AbcPlaybackController {
       secondsPerSubdivision: effectiveSecondsPerSubdivision,
       originalSecondsPerSubdivision: derived.secondsPerSubdivision,
       warp: this.synthControl?.warp,
-      currentTempo: this.synthControl?.currentTempo,
     });
 
     // Emit the current tempo (warped)
@@ -548,7 +554,6 @@ export class AbcPlaybackController {
     console.log(`${logPrefix} Tempo changed (timeline unchanged)`, {
       secondsPerSubdivision: effectiveSecondsPerSubdivision,
       warp: this.synthControl?.warp,
-      currentTempo: this.synthControl?.currentTempo,
       subdivisionsPerMeasure: this.cachedSubdivisionsPerMeasure,
     });
 
@@ -741,13 +746,12 @@ export class AbcPlaybackController {
         this.timingCallbacks.qpm = preciseQpm;
         console.log(`${logPrefix} Updated timingCallbacks.qpm`, {
           preciseQpm,
-          roundedCurrentTempo: this.synthControl.currentTempo,
         });
-      } else if (typeof this.synthControl.currentTempo === 'number') {
-        // Fallback to rounded tempo if precise calculation fails
-        this.timingCallbacks.qpm = this.synthControl.currentTempo;
+      } else {
+        // Do NOT fall back to rounded currentTempo - it causes sync drift.
+        // If we can't calculate precise QPM, leave the existing qpm unchanged.
         console.warn(
-          `${logPrefix} Using rounded currentTempo as fallback (may cause sync issues)`
+          `${logPrefix} Could not calculate precise QPM; leaving timingCallbacks.qpm unchanged`
         );
       }
 
