@@ -176,7 +176,7 @@ export class AbcPlaybackController {
   private eventSequence = 0;
   private resetButtonCleanup: (() => void) | null = null;
   private audioDataPrepared = false;
-  
+
   // Cached subdivision unit for tempo calculations (avoids rebuilding timeline on warp change)
   private cachedSubdivisionUnit: number = 4;
 
@@ -389,9 +389,10 @@ export class AbcPlaybackController {
     this.cachedSubdivisionUnit = derived.timeline.subdivisionUnit || 4;
 
     // Calculate effective seconds per subdivision based on current tempo (which includes warp)
-    const effectiveSecondsPerSubdivision = this.calculateEffectiveSecondsPerSubdivision(
-      derived.secondsPerSubdivision
-    );
+    const effectiveSecondsPerSubdivision =
+      this.calculateEffectiveSecondsPerSubdivision(
+        derived.secondsPerSubdivision
+      );
 
     console.log(`${logPrefix} Derived timeline`, {
       notes: derived.timeline.notes.length,
@@ -448,9 +449,10 @@ export class AbcPlaybackController {
    * Called when warp/speed changes.
    */
   private emitTempoChange() {
-    const effectiveSecondsPerSubdivision = this.calculateEffectiveSecondsPerSubdivision(
-      DEFAULT_SECONDS_PER_SUBDIVISION
-    );
+    const effectiveSecondsPerSubdivision =
+      this.calculateEffectiveSecondsPerSubdivision(
+        DEFAULT_SECONDS_PER_SUBDIVISION
+      );
 
     console.log(`${logPrefix} Tempo changed (timeline unchanged)`, {
       secondsPerSubdivision: effectiveSecondsPerSubdivision,
