@@ -28,18 +28,26 @@ import {
  *    twice as long in real time. Use this with the current (warped) tempo to
  *    convert back to musical position (subdivisions).
  *
- * 3. **synthControl.currentTempo** - The ACTUAL current tempo in QPM (quarter
- *    notes per minute), INCLUDING warp adjustments. Use this to calculate the
- *    effective seconds-per-subdivision for playback synchronization.
+ * 3. **synthControl.currentTempo** - The current tempo in QPM, **ROUNDED** to
+ *    an integer by abcjs. DO NOT USE for timing calculations! For example,
+ *    65 BPM at 50% warp gives precise 32.5 QPM, but currentTempo shows 33.
+ *    This causes sync drift when resuming or seeking.
  *
  * 4. **TimingCallbacks.noteTimings** - Contains timing data at the ORIGINAL
  *    tempo. The `milliseconds` values here are pre-computed at original tempo,
  *    not warped. But the `pitchInfo.start` and `pitchInfo.duration` values are
  *    in whole notes (invariant).
  *
+ * 5. **synthControl.warp** - The warp percentage (100 = normal, 50 = half).
+ *    Use this with millisecondsPerMeasure() to calculate the PRECISE tempo:
+ *    preciseQpm = originalQpm * (warp / 100)
+ *
  * KEY INSIGHT: The timeline (notes with startSubdivision/durationSubdivisions)
  * should be built once and is invariant. Only the tempo conversion factor
  * (secondsPerSubdivision) needs to change when warp changes.
+ *
+ * SYNC FIX: When updating timingCallbacks.qpm, use calculatePreciseQpm()
+ * instead of currentTempo to avoid sync drift at non-integer tempos.
  * ============================================================================
  */
 
@@ -431,6 +439,37 @@ export class AbcPlaybackController {
   }
 
   /**
+   * Get the current warp value, defaulting to 100% if unavailable.
+   */
+  private getCurrentWarp(): number {
+    return this.synthControl &&
+      typeof this.synthControl.warp === 'number' &&
+      this.synthControl.warp > 0
+      ? this.synthControl.warp
+      : 100;
+  }
+
+  /**
+   * Get the original millisecondsPerMeasure from visualObj.
+   * Returns undefined if not available.
+   */
+  private getOriginalMsPerMeasure(): number | undefined {
+    const msPerMeasure =
+      typeof this.visualObj?.millisecondsPerMeasure === 'function'
+        ? this.visualObj.millisecondsPerMeasure()
+        : undefined;
+
+    if (
+      typeof msPerMeasure === 'number' &&
+      Number.isFinite(msPerMeasure) &&
+      msPerMeasure > 0
+    ) {
+      return msPerMeasure;
+    }
+    return undefined;
+  }
+
+  /**
    * Calculate effective seconds per subdivision based on current tempo.
    *
    * Uses precise calculation from visualObj.millisecondsPerMeasure() and warp.
@@ -441,25 +480,10 @@ export class AbcPlaybackController {
    * @param fallback - Fallback value if tempo cannot be calculated
    */
   private calculateEffectiveSecondsPerSubdivision(fallback: number): number {
-    // Get warp from synth controller (defaults to 100%)
-    const warp =
-      this.synthControl &&
-      typeof this.synthControl.warp === 'number' &&
-      this.synthControl.warp > 0
-        ? this.synthControl.warp
-        : 100;
+    const warp = this.getCurrentWarp();
+    const originalMsPerMeasure = this.getOriginalMsPerMeasure();
 
-    // Get original millisecondsPerMeasure from visualObj (unaffected by warp)
-    const originalMsPerMeasure =
-      typeof this.visualObj?.millisecondsPerMeasure === 'function'
-        ? this.visualObj.millisecondsPerMeasure()
-        : undefined;
-
-    if (
-      typeof originalMsPerMeasure !== 'number' ||
-      !Number.isFinite(originalMsPerMeasure) ||
-      originalMsPerMeasure <= 0
-    ) {
+    if (originalMsPerMeasure === undefined) {
       return fallback;
     }
 
@@ -473,6 +497,42 @@ export class AbcPlaybackController {
       effectiveMsPerMeasure / 1000 / subdivisionsPerMeasure;
 
     return secondsPerSubdivision;
+  }
+
+  /**
+   * Calculate the precise QPM (quarters per minute) based on current warp.
+   *
+   * IMPORTANT: This returns the PRECISE tempo, not the rounded value from
+   * synthControl.currentTempo. The audio playback uses precise tempo internally,
+   * so we must match that for proper synchronization.
+   *
+   * For example, at 65 BPM with 50% warp:
+   * - Precise QPM: 32.5
+   * - currentTempo (rounded): 33 or 32
+   *
+   * Using the rounded value causes sync drift when resuming or seeking.
+   *
+   * @returns Precise QPM value, or undefined if cannot be calculated
+   */
+  private calculatePreciseQpm(): number | undefined {
+    const warp = this.getCurrentWarp();
+    const originalMsPerMeasure = this.getOriginalMsPerMeasure();
+
+    if (originalMsPerMeasure === undefined) {
+      return undefined;
+    }
+
+    // Calculate original QPM from millisecondsPerMeasure
+    // QPM = 60 / secondsPerBeat = 60 / (msPerMeasure / 1000 / beatsPerMeasure)
+    //     = 60 * 1000 * beatsPerMeasure / msPerMeasure
+    const beatsPerMeasure = this.cachedBeatsPerMeasure || 4;
+    const originalQpm = (60 * 1000 * beatsPerMeasure) / originalMsPerMeasure;
+
+    // Apply warp to get effective QPM
+    // warp=100 means normal speed, warp=50 means half speed (lower QPM)
+    const preciseQpm = (originalQpm * warp) / 100;
+
+    return preciseQpm;
   }
 
   /**
@@ -673,9 +733,22 @@ export class AbcPlaybackController {
     }
 
     try {
-      // Update the timing callbacks with the new tempo
-      if (typeof this.synthControl.currentTempo === 'number') {
+      // Update the timing callbacks with the PRECISE tempo (not rounded currentTempo).
+      // The audio playback uses precise tempo internally, so we must match that
+      // for proper synchronization when resuming or seeking.
+      const preciseQpm = this.calculatePreciseQpm();
+      if (preciseQpm !== undefined) {
+        this.timingCallbacks.qpm = preciseQpm;
+        console.log(`${logPrefix} Updated timingCallbacks.qpm`, {
+          preciseQpm,
+          roundedCurrentTempo: this.synthControl.currentTempo,
+        });
+      } else if (typeof this.synthControl.currentTempo === 'number') {
+        // Fallback to rounded tempo if precise calculation fails
         this.timingCallbacks.qpm = this.synthControl.currentTempo;
+        console.warn(
+          `${logPrefix} Using rounded currentTempo as fallback (may cause sync issues)`
+        );
       }
 
       // Re-sync the timing callbacks with current playback position
