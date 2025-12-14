@@ -100,7 +100,6 @@ export const OtamatoneRoll: React.FC = () => {
   const currentTime = useAppStore((state) => state.currentTime);
   const isPlaying = useAppStore((state) => state.isPlaying);
   const activeNoteEvent = useAppStore((state) => state.activeNoteEvent);
-  const noteCharTimes = useAppStore((state) => state.noteCharTimes);
   const currentSecondsPerSubdivision = useAppStore(
     (state) => state.currentSecondsPerSubdivision
   );
@@ -125,14 +124,20 @@ export const OtamatoneRoll: React.FC = () => {
     [totalSubdivisions, subdivisionsPerBeat]
   );
 
-  // Use current playback tempo from store
+  // Use current playback tempo from store.
+  // IMPORTANT: This value changes when warp/speed changes. It's the ACTUAL
+  // playback tempo, not the original tempo from the ABC notation.
+  // abcjs reports real-time positions (affected by warp), so we need the
+  // warped tempo to correctly convert back to musical subdivisions.
   const effectiveSecondsPerSubdivision =
     typeof currentSecondsPerSubdivision === 'number' &&
     currentSecondsPerSubdivision > 0
       ? currentSecondsPerSubdivision
       : DEFAULT_SECONDS_PER_SUBDIVISION;
 
-  // Convert seconds to subdivisions using current tempo
+  // Convert real-time seconds to subdivisions using current (warped) tempo.
+  // This is used to sync playback position from abcjs (which reports in real-time)
+  // to musical position (subdivisions) which the timeline uses.
   const secondsToSubdivisions = useCallback(
     (seconds?: number): number | undefined => {
       if (typeof seconds !== 'number' || !Number.isFinite(seconds)) {
@@ -214,26 +219,12 @@ export const OtamatoneRoll: React.FC = () => {
     return map;
   }, [notes]);
 
-  // Compute adjusted start subdivisions from noteCharTimes (if available)
-  // This allows cursor sync from the ABC notation viewer
+  // Use the note's startSubdivision directly - it's already invariant to tempo changes.
+  // Note: noteCharTimes stores seconds at original tempo (for cursor sync during playback),
+  // but we don't use it here because note positions are already correct in subdivisions.
   const noteStartSubdivisions = useMemo(() => {
-    return notes.map((note) => {
-      const startChar = note.source?.startChar;
-      if (
-        typeof startChar === 'number' &&
-        noteCharTimes &&
-        typeof noteCharTimes[startChar] === 'number'
-      ) {
-        const subdivisionFromCharTime = secondsToSubdivisions(
-          noteCharTimes[startChar]
-        );
-        if (typeof subdivisionFromCharTime === 'number') {
-          return subdivisionFromCharTime;
-        }
-      }
-      return note.startSubdivision;
-    });
-  }, [secondsToSubdivisions, notes, noteCharTimes]);
+    return notes.map((note) => note.startSubdivision);
+  }, [notes]);
 
   // Compute total subdivisions including any adjusted notes
   const renderedTotalSubdivisions = useMemo(() => {

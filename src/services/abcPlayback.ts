@@ -7,9 +7,41 @@ import {
 } from '../types/music';
 import {
   buildTimingDerivedData,
+  DEFAULT_SECONDS_PER_SUBDIVISION,
   TimingEvent,
   VisualObjWithTimings,
 } from '../utils/abcTiming';
+
+/**
+ * ============================================================================
+ * ABCJS TIMING BEHAVIOR NOTES
+ * ============================================================================
+ *
+ * abcjs has several timing-related values that behave differently:
+ *
+ * 1. **visualObj.millisecondsPerMeasure()** - Returns the ORIGINAL tempo from
+ *    the ABC notation, unaffected by warp/speed changes. This is useful for
+ *    building the invariant timeline but NOT for real-time playback sync.
+ *
+ * 2. **TimingCallbacks event.milliseconds** - Reports REAL elapsed time during
+ *    playback, AFFECTED by warp. At 50% warp, the same musical position takes
+ *    twice as long in real time. Use this with the current (warped) tempo to
+ *    convert back to musical position (subdivisions).
+ *
+ * 3. **synthControl.currentTempo** - The ACTUAL current tempo in QPM (quarter
+ *    notes per minute), INCLUDING warp adjustments. Use this to calculate the
+ *    effective seconds-per-subdivision for playback synchronization.
+ *
+ * 4. **TimingCallbacks.noteTimings** - Contains timing data at the ORIGINAL
+ *    tempo. The `milliseconds` values here are pre-computed at original tempo,
+ *    not warped. But the `pitchInfo.start` and `pitchInfo.duration` values are
+ *    in whole notes (invariant).
+ *
+ * KEY INSIGHT: The timeline (notes with startSubdivision/durationSubdivisions)
+ * should be built once and is invariant. Only the tempo conversion factor
+ * (secondsPerSubdivision) needs to change when warp changes.
+ * ============================================================================
+ */
 
 const isBrowser = () => typeof document !== 'undefined';
 const logPrefix = '[AbcPlayback]';
@@ -144,6 +176,9 @@ export class AbcPlaybackController {
   private eventSequence = 0;
   private resetButtonCleanup: (() => void) | null = null;
   private audioDataPrepared = false;
+  
+  // Cached subdivision unit for tempo calculations (avoids rebuilding timeline on warp change)
+  private cachedSubdivisionUnit: number = 4;
 
   constructor(config: AbcPlaybackConfig) {
     this.notation = config.notation;
@@ -235,6 +270,9 @@ export class AbcPlaybackController {
       return;
     }
 
+    // NOTE: event.milliseconds is the REAL elapsed time, AFFECTED by warp.
+    // At 50% warp, a note at subdivision 2 will fire at ~2x the original milliseconds.
+    // To convert back to subdivisions, divide by the CURRENT (warped) secondsPerSubdivision.
     const milliseconds = (event as { milliseconds?: number }).milliseconds;
     if (typeof milliseconds === 'number' && Number.isFinite(milliseconds)) {
       const currentTime = milliseconds / 1000;
@@ -315,6 +353,20 @@ export class AbcPlaybackController {
     }
   }
 
+  /**
+   * Emits timing data to callbacks.
+   *
+   * IMPORTANT: This function handles the split between:
+   * 1. The INVARIANT timeline (notes with startSubdivision/durationSubdivisions)
+   *    - Built from the ABC notation, never changes with tempo/warp
+   * 2. The CURRENT tempo (effectiveSecondsPerSubdivision)
+   *    - Changes when warp/speed is adjusted
+   *    - Used to convert real-time playback position to subdivisions
+   *
+   * The timeline from buildTimingDerivedData uses the ORIGINAL tempo (from
+   * visualObj.millisecondsPerMeasure), but we override the tempo with the
+   * CURRENT tempo from synthControl.currentTempo (which includes warp).
+   */
   private emitTimingDerivedData() {
     if (!this.visualObj || !this.timingCallbacks) {
       this.resetDerivedData();
@@ -327,19 +379,30 @@ export class AbcPlaybackController {
       return;
     }
 
+    // buildTimingDerivedData returns the ORIGINAL tempo (unaffected by warp)
     const derived = buildTimingDerivedData(
       this.visualObj,
       timings as TimingEvent[]
     );
 
+    // Cache the subdivision unit for tempo calculations (avoids rebuilding timeline on warp change)
+    this.cachedSubdivisionUnit = derived.timeline.subdivisionUnit || 4;
+
+    // Calculate effective seconds per subdivision based on current tempo (which includes warp)
+    const effectiveSecondsPerSubdivision = this.calculateEffectiveSecondsPerSubdivision(
+      derived.secondsPerSubdivision
+    );
+
     console.log(`${logPrefix} Derived timeline`, {
       notes: derived.timeline.notes.length,
       totalSubdivisions: derived.timeline.totalSubdivisions,
-      secondsPerSubdivision: derived.secondsPerSubdivision,
+      secondsPerSubdivision: effectiveSecondsPerSubdivision,
+      originalSecondsPerSubdivision: derived.secondsPerSubdivision,
+      currentTempo: this.synthControl?.currentTempo,
     });
 
-    // Emit the current tempo
-    this.callbacks.onSecondsPerBeatChange?.(derived.secondsPerBeat);
+    // Emit the current tempo (warped)
+    this.callbacks.onSecondsPerBeatChange?.(effectiveSecondsPerSubdivision);
 
     this.callbacks.onCharTimeMapChange?.(derived.charMap);
 
@@ -355,6 +418,47 @@ export class AbcPlaybackController {
       });
       this.callbacks.onNoteTimelineChange?.(derived.timeline);
     }
+  }
+
+  /**
+   * Calculate effective seconds per subdivision based on current tempo.
+   * Uses synthControl.currentTempo which includes warp adjustments.
+   *
+   * @param fallback - Fallback value if currentTempo is not available
+   */
+  private calculateEffectiveSecondsPerSubdivision(fallback: number): number {
+    if (
+      !this.synthControl ||
+      typeof this.synthControl.currentTempo !== 'number' ||
+      this.synthControl.currentTempo <= 0
+    ) {
+      return fallback;
+    }
+
+    // currentTempo is QPM - convert to seconds per quarter note, then to seconds per subdivision
+    const secondsPerQuarterNote = 60 / this.synthControl.currentTempo;
+    // subdivisionUnit is the meter denominator (4 for quarter notes, 8 for eighth notes)
+    // For a quarter note (unit=4): secondsPerSubdivision = secondsPerQuarterNote
+    // For an eighth note (unit=8): secondsPerSubdivision = secondsPerQuarterNote / 2
+    return secondsPerQuarterNote * (4 / this.cachedSubdivisionUnit);
+  }
+
+  /**
+   * Emit only the tempo change, without rebuilding the invariant timeline.
+   * Called when warp/speed changes.
+   */
+  private emitTempoChange() {
+    const effectiveSecondsPerSubdivision = this.calculateEffectiveSecondsPerSubdivision(
+      DEFAULT_SECONDS_PER_SUBDIVISION
+    );
+
+    console.log(`${logPrefix} Tempo changed (timeline unchanged)`, {
+      secondsPerSubdivision: effectiveSecondsPerSubdivision,
+      currentTempo: this.synthControl?.currentTempo,
+      subdivisionUnit: this.cachedSubdivisionUnit,
+    });
+
+    this.callbacks.onSecondsPerBeatChange?.(effectiveSecondsPerSubdivision);
   }
 
   private setupAudioControls() {
@@ -525,16 +629,22 @@ export class AbcPlaybackController {
     }
   }
 
+  /**
+   * Called when warp/speed changes.
+   * Only updates the tempo conversion factor - the timeline is invariant and doesn't change.
+   */
   private refreshTimingAfterTempoChange() {
     if (!this.visualObj || !this.synthControl || !this.timingCallbacks) {
       return;
     }
 
     try {
+      // Update the timing callbacks with the new tempo
       if (typeof this.synthControl.currentTempo === 'number') {
         this.timingCallbacks.qpm = this.synthControl.currentTempo;
       }
 
+      // Re-sync the timing callbacks with current playback position
       this.timingCallbacks.replaceTarget?.(this.visualObj);
 
       if (typeof this.synthControl.percent === 'number') {
@@ -549,8 +659,8 @@ export class AbcPlaybackController {
         this.timingCallbacks.stop?.();
       }
 
-      this.emitTimingDerivedData();
-      console.log(`${logPrefix} Timing refreshed after tempo change.`);
+      // Only emit tempo change - timeline is invariant and doesn't need to be rebuilt
+      this.emitTempoChange();
     } catch (error) {
       console.warn('Unable to refresh timing after tempo change', error);
     }

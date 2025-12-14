@@ -120,6 +120,21 @@ const getSubdivisionsPerBeat = (
 
 /**
  * Calculate seconds per subdivision from the visual object or timing events.
+ *
+ * IMPORTANT: This returns the ORIGINAL tempo from the ABC notation, NOT the
+ * current playback tempo (which may be affected by warp/speed control).
+ *
+ * abcjs behavior:
+ * - `visualObj.millisecondsPerMeasure()` always returns the original tempo
+ * - This value does NOT change when setWarp() is called
+ * - For real-time playback sync, use `synthControl.currentTempo` instead
+ *
+ * This function is appropriate for:
+ * - Building the initial timeline (which is tempo-invariant)
+ * - Getting the base tempo before any warp is applied
+ *
+ * This function is NOT appropriate for:
+ * - Converting real-time playback position to subdivisions (use currentTempo)
  */
 const getSecondsPerSubdivision = (
   visualObj: VisualObjWithTimings,
@@ -127,7 +142,8 @@ const getSecondsPerSubdivision = (
 ): number => {
   const { subdivisionsPerMeasure } = getMeterInfo(visualObj);
 
-  // Try to get milliseconds per measure from the visual object
+  // NOTE: millisecondsPerMeasure() returns the ORIGINAL tempo, unaffected by warp.
+  // This is intentional here since we're building the invariant timeline.
   const msPerMeasureFromMethod =
     typeof visualObj?.millisecondsPerMeasure === 'function'
       ? visualObj.millisecondsPerMeasure()
@@ -141,7 +157,7 @@ const getSecondsPerSubdivision = (
     return msPerMeasureFromMethod / 1000 / subdivisionsPerMeasure;
   }
 
-  // Fallback: try to get from first timing event
+  // Fallback: millisecondsPerMeasure on timing events also reflects original tempo
   const firstTimingWithMeasure = timings.find(
     (event) =>
       typeof event?.millisecondsPerMeasure === 'number' &&
