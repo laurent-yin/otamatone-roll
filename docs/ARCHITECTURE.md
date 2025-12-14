@@ -51,13 +51,14 @@ K:C
 C D E F | G A B c |
 ```
 
-### Beat-Based Timeline
+### Subdivision-Based Timeline
 
-All timing is stored in **beats** (not seconds), making the timeline invariant to tempo changes. This is a core architectural decision:
+All timing is stored in **subdivisions** (not seconds), making the timeline invariant to tempo changes. A subdivision is the base rhythmic unit defined by the meter denominator (e.g., quarter notes in 4/4, eighth notes in 6/8). This is a core architectural decision:
 
-- `NoteTimeline.notes[].startBeat` - when the note starts (in beats)
-- `NoteTimeline.notes[].durationBeats` - how long it lasts (in beats)
-- `secondsPerBeat` is computed separately and applied at render/playback time
+- `NoteTimeline.notes[].startSubdivision` - when the note starts (in subdivisions)
+- `NoteTimeline.notes[].durationSubdivisions` - how long it lasts (in subdivisions)
+- `secondsPerSubdivision` is computed separately and applied at render/playback time
+- `subdivisionsPerBeat` indicates how many subdivisions form one perceptible beat (1 for simple meters, 3 for compound meters like 6/8, 12/8)
 
 ### Frequency Range
 
@@ -93,7 +94,7 @@ The Otamatone Roll displays notes within a configurable frequency range (Hz), al
 Zustand store containing:
 
 - `notation` - Current ABC notation string
-- `noteTimeline` - Parsed beat-based timeline (derived from ABC)
+- `noteTimeline` - Parsed subdivision-based timeline (derived from ABC)
 - `currentTime` - Playback position in seconds
 - `isPlaying` - Playback state
 - `lowestNoteHz` / `highestNoteHz` - Display range for piano roll
@@ -113,15 +114,15 @@ Persisted to localStorage: `notation`, frequency range settings.
 
 `buildTimingDerivedData()` - Core function that transforms abcjs timing events into:
 
-- `NoteTimeline` - Beat-based note data (invariant to tempo)
+- `NoteTimeline` - Subdivision-based note data (invariant to tempo)
 - `NoteCharTimeMap` - Maps character positions to time (for cursor sync)
-- `secondsPerBeat` - Current tempo for playback conversion
+- `secondsPerSubdivision` - Current tempo for playback conversion
 
 ### Types (`types/music.ts`)
 
 Core domain types:
 
-- `Note` - Single note with pitch (MIDI), startBeat, durationBeats, velocity
+- `Note` - Single note with pitch (MIDI), startSubdivision, durationSubdivisions, velocity
 - `NoteTimeline` - Collection of notes with total duration and measure info
 - `NotePlaybackEvent` - Real-time event emitted during playback
 
@@ -149,9 +150,9 @@ npm run test:browser   # Chromium integration tests
 
 ## Design Decisions
 
-### Why beats instead of seconds?
+### Why subdivisions instead of seconds?
 
-Storing timing in beats decouples the musical structure from tempo. When the user changes playback speed (warp), only `secondsPerBeat` needs to update—the `NoteTimeline` remains unchanged.
+Storing timing in subdivisions decouples the musical structure from tempo. When the user changes playback speed (warp), only `secondsPerSubdivision` needs to update—the `NoteTimeline` remains unchanged. Subdivisions also provide a consistent unit across different meters (a subdivision is always the meter denominator's note value).
 
 ### Why Zustand?
 
@@ -168,4 +169,4 @@ To add new features:
 - **New panel**: Add component in `components/`, register in `DockviewLayout.tsx`
 - **New store state**: Add to `AppState` interface in `appStore.ts`
 - **New ABC processing**: Extend `buildTimingDerivedData()` in `abcTiming.ts`
-- **New visualization**: Read from `noteTimeline` in store, convert beats to pixels
+- **New visualization**: Read from `noteTimeline` in store, convert subdivisions to pixels

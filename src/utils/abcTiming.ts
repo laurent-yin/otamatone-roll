@@ -33,33 +33,42 @@ export interface TimingEvent extends Omit<NoteTimingEvent, 'type'> {
   barNumber?: number;
 }
 
-/** Default beats per quarter note (standard music notation) */
-const BEATS_PER_QUARTER_NOTE = 1;
-/** Quarter notes per whole note */
-const QUARTER_NOTES_PER_WHOLE = 4;
 /** Default BPM when not specified */
 const DEFAULT_BPM = 120;
 /**
- * Default seconds per beat at 120 BPM.
+ * Default seconds per subdivision at 120 BPM (assuming quarter note subdivision).
  * Used as fallback when tempo cannot be determined from ABC notation.
  */
-export const DEFAULT_SECONDS_PER_BEAT = 60 / DEFAULT_BPM;
+export const DEFAULT_SECONDS_PER_SUBDIVISION = 60 / DEFAULT_BPM;
+
+/**
+ * @deprecated Use DEFAULT_SECONDS_PER_SUBDIVISION instead
+ */
+export const DEFAULT_SECONDS_PER_BEAT = DEFAULT_SECONDS_PER_SUBDIVISION;
 
 /**
  * Result of building timing data from ABC notation.
- * Contains both the beat-based timeline (invariant) and tempo info for playback.
+ * Contains both the subdivision-based timeline (invariant) and tempo info for playback.
  */
 export interface TimingDerivedData {
   /** Map from character position to time in seconds (for cursor sync) */
   charMap: NoteCharTimeMap;
-  /** The musical timeline in beats (invariant to tempo) */
+  /** The musical timeline in subdivisions (invariant to tempo) */
   timeline: NoteTimeline;
-  /** Baseline tempo from the ABC notation */
+  /** Seconds per subdivision (for converting to real time) */
+  secondsPerSubdivision: number;
+  /**
+   * @deprecated Use secondsPerSubdivision instead
+   */
   secondsPerBeat: number;
 }
 
 /**
  * Extract meter information from the visual object.
+ *
+ * Returns subdivision-based meter info:
+ * - subdivisionsPerMeasure: The meter numerator (e.g., 12 for 12/8)
+ * - subdivisionUnit: The meter denominator (e.g., 8 for 12/8)
  */
 const getMeterInfo = (visualObj: VisualObjWithTimings) => {
   const meter =
@@ -67,7 +76,7 @@ const getMeterInfo = (visualObj: VisualObjWithTimings) => {
       ? visualObj.getMeterFraction()
       : undefined;
 
-  const beatsPerMeasure =
+  const subdivisionsPerMeasure =
     meter &&
     typeof meter.num === 'number' &&
     Number.isFinite(meter.num) &&
@@ -75,7 +84,7 @@ const getMeterInfo = (visualObj: VisualObjWithTimings) => {
       ? meter.num
       : 4; // default to 4/4
 
-  const beatUnit =
+  const subdivisionUnit =
     meter &&
     typeof meter.den === 'number' &&
     Number.isFinite(meter.den) &&
@@ -83,17 +92,40 @@ const getMeterInfo = (visualObj: VisualObjWithTimings) => {
       ? meter.den
       : 4; // default quarter note
 
-  return { beatsPerMeasure, beatUnit };
+  return { subdivisionsPerMeasure, subdivisionUnit };
 };
 
 /**
- * Calculate seconds per beat from the visual object or timing events.
+ * Determine how many subdivisions make up one musical beat.
+ *
+ * For compound meters (6/8, 9/8, 12/8), a beat is typically a dotted quarter = 3 subdivisions.
+ * For simple meters (4/4, 3/4, 2/4), a beat equals one subdivision.
+ *
+ * @param subdivisionsPerMeasure - The meter numerator
+ * @param subdivisionUnit - The meter denominator
+ * @returns Number of subdivisions per beat
  */
-const getSecondsPerBeat = (
+const getSubdivisionsPerBeat = (
+  subdivisionsPerMeasure: number,
+  subdivisionUnit: number
+): number => {
+  // Compound meter detection: numerator divisible by 3 (but not 3 itself) and denominator is 8
+  const isCompoundMeter =
+    subdivisionUnit === 8 &&
+    subdivisionsPerMeasure > 3 &&
+    subdivisionsPerMeasure % 3 === 0;
+
+  return isCompoundMeter ? 3 : 1;
+};
+
+/**
+ * Calculate seconds per subdivision from the visual object or timing events.
+ */
+const getSecondsPerSubdivision = (
   visualObj: VisualObjWithTimings,
   timings: TimingEvent[]
 ): number => {
-  const { beatsPerMeasure } = getMeterInfo(visualObj);
+  const { subdivisionsPerMeasure } = getMeterInfo(visualObj);
 
   // Try to get milliseconds per measure from the visual object
   const msPerMeasureFromMethod =
@@ -106,7 +138,7 @@ const getSecondsPerBeat = (
     Number.isFinite(msPerMeasureFromMethod) &&
     msPerMeasureFromMethod > 0
   ) {
-    return msPerMeasureFromMethod / 1000 / beatsPerMeasure;
+    return msPerMeasureFromMethod / 1000 / subdivisionsPerMeasure;
   }
 
   // Fallback: try to get from first timing event
@@ -118,7 +150,9 @@ const getSecondsPerBeat = (
 
   if (firstTimingWithMeasure?.millisecondsPerMeasure) {
     return (
-      firstTimingWithMeasure.millisecondsPerMeasure / 1000 / beatsPerMeasure
+      firstTimingWithMeasure.millisecondsPerMeasure /
+      1000 /
+      subdivisionsPerMeasure
     );
   }
 
@@ -126,47 +160,68 @@ const getSecondsPerBeat = (
 };
 
 /**
- * Builds beat-based timeline data from ABC notation timing events.
+ * Builds subdivision-based timeline data from ABC notation timing events.
  * This is the core function that transforms abcjs timing callbacks into
  * a tempo-invariant musical timeline.
  *
- * The resulting timeline stores all timing in beats (not seconds), making it
- * independent of tempo changes. The `secondsPerBeat` value can be used to
+ * The resulting timeline stores all timing in subdivisions (not seconds), making it
+ * independent of tempo changes. The `secondsPerSubdivision` value can be used to
  * convert to real time for playback.
+ *
+ * Terminology:
+ * - Subdivision: The meter's base unit (denominator). In 12/8, this is an eighth note.
+ * - Beat: The human-perceivable pulse. In 12/8, a dotted quarter (3 subdivisions).
  *
  * @param visualObj - The abcjs TuneObject (from renderAbc)
  * @param timings - Array of timing events from abcjs TimingCallbacks
  * @param options - Optional configuration
- * @param options.secondsPerBeat - Override tempo (seconds per beat)
+ * @param options.secondsPerSubdivision - Override tempo (seconds per subdivision)
  * @returns Derived timing data including charMap, timeline, and tempo
  *
  * @example
  * const visualObjs = abcjs.renderAbc('container', notation);
  * const timingCallbacks = new abcjs.TimingCallbacks(visualObjs[0], {});
  * const derived = buildTimingDerivedData(visualObjs[0], timingCallbacks.noteTimings);
- * console.log(derived.timeline.notes); // Beat-based notes
- * console.log(derived.secondsPerBeat); // Tempo for playback conversion
+ * console.log(derived.timeline.notes); // Subdivision-based notes
+ * console.log(derived.secondsPerSubdivision); // Tempo for playback conversion
  */
 export const buildTimingDerivedData = (
   visualObj: VisualObjWithTimings,
   timings: TimingEvent[],
-  options?: { secondsPerBeat?: number }
+  options?: { secondsPerSubdivision?: number }
 ): TimingDerivedData => {
   const mapping: NoteCharTimeMap = {};
   const notes: Note[] = [];
   const measureBoundaries: number[] = [];
 
   // Get tempo and meter info
-  const secondsPerBeat =
-    options?.secondsPerBeat ?? getSecondsPerBeat(visualObj, timings);
-  const { beatsPerMeasure } = getMeterInfo(visualObj);
+  const { subdivisionsPerMeasure, subdivisionUnit } = getMeterInfo(visualObj);
+  const secondsPerSubdivision =
+    options?.secondsPerSubdivision ??
+    getSecondsPerSubdivision(visualObj, timings);
+  const subdivisionsPerBeat = getSubdivisionsPerBeat(
+    subdivisionsPerMeasure,
+    subdivisionUnit
+  );
+
+  // Calculate how many subdivisions are in a whole note
+  // This is needed to convert pitchInfo.duration (in whole notes) to subdivisions
+  // Example for 12/8:
+  // - subdivisionUnit = 8 (eighth notes)
+  // - An eighth note (0.125 whole) = 0.125 * 8 = 1 subdivision ✓
+  // - A dotted quarter (0.375 whole) = 0.375 * 8 = 3 subdivisions ✓
+  const wholeNoteInSubdivisions = subdivisionUnit;
 
   // Helper to add unique boundaries
-  const addBoundary = (collection: number[], beat?: number) => {
-    if (typeof beat !== 'number' || !Number.isFinite(beat) || beat < 0) {
+  const addBoundary = (collection: number[], subdivision?: number) => {
+    if (
+      typeof subdivision !== 'number' ||
+      !Number.isFinite(subdivision) ||
+      subdivision < 0
+    ) {
       return;
     }
-    const normalized = Number(beat.toFixed(6));
+    const normalized = Number(subdivision.toFixed(6));
     const last = collection[collection.length - 1];
     if (typeof last === 'number' && Math.abs(last - normalized) < 1e-4) {
       return;
@@ -174,16 +229,16 @@ export const buildTimingDerivedData = (
     collection.push(normalized);
   };
 
-  let maxEndBeats = 0;
+  let maxEndSubdivisions = 0;
   let lastMeasureIndex: number | null = null;
 
   timings.forEach((event) => {
     if (!event) return;
 
-    // Convert milliseconds to beats
-    const timeBeats =
-      typeof event.milliseconds === 'number' && secondsPerBeat > 0
-        ? event.milliseconds / 1000 / secondsPerBeat
+    // Convert milliseconds to subdivisions
+    const timeSubdivisions =
+      typeof event.milliseconds === 'number' && secondsPerSubdivision > 0
+        ? event.milliseconds / 1000 / secondsPerSubdivision
         : undefined;
 
     // Build char map (still in seconds for cursor sync with abcjs)
@@ -207,9 +262,9 @@ export const buildTimingDerivedData = (
     // Handle bar/measure events
     if (
       (event.type === 'bar' || event.type === 'measure') &&
-      typeof timeBeats === 'number'
+      typeof timeSubdivisions === 'number'
     ) {
-      addBoundary(measureBoundaries, timeBeats);
+      addBoundary(measureBoundaries, timeSubdivisions);
     }
 
     // Handle measure number changes
@@ -236,11 +291,11 @@ export const buildTimingDerivedData = (
         const hasMeasureStartFlag = event.measureStart === true;
         const measureStartUnknown = typeof event.measureStart === 'undefined';
         if (
-          typeof timeBeats === 'number' &&
-          timeBeats > 0 &&
+          typeof timeSubdivisions === 'number' &&
+          timeSubdivisions > 0 &&
           (hasMeasureStartFlag || measureStartUnknown)
         ) {
-          addBoundary(measureBoundaries, timeBeats);
+          addBoundary(measureBoundaries, timeSubdivisions);
         }
         lastMeasureIndex = eventMeasureIndex;
       }
@@ -254,34 +309,35 @@ export const buildTimingDerivedData = (
     event.midiPitches.forEach((pitchInfo, index) => {
       if (!pitchInfo || typeof pitchInfo.pitch !== 'number') return;
 
-      // Get start beat - prefer event milliseconds, fall back to pitchInfo.start (in whole notes)
-      let startBeat: number;
-      if (typeof timeBeats === 'number') {
-        startBeat = timeBeats;
+      // Get start subdivision - prefer event milliseconds, fall back to pitchInfo.start (in whole notes)
+      let startSubdivision: number;
+      if (typeof timeSubdivisions === 'number') {
+        startSubdivision = timeSubdivisions;
       } else if (typeof pitchInfo.start === 'number') {
-        // pitchInfo.start is in whole notes, convert to quarter note beats
-        startBeat =
-          pitchInfo.start * QUARTER_NOTES_PER_WHOLE * BEATS_PER_QUARTER_NOTE;
+        // pitchInfo.start is in whole notes, convert to subdivisions
+        startSubdivision = pitchInfo.start * wholeNoteInSubdivisions;
       } else {
-        startBeat = 0;
+        startSubdivision = 0;
       }
 
-      // Get duration in beats
-      let durationBeats: number;
-      if (typeof event.duration === 'number' && secondsPerBeat > 0) {
+      // Get duration in subdivisions
+      let durationSubdivisions: number;
+      if (typeof event.duration === 'number' && secondsPerSubdivision > 0) {
         // event.duration is in milliseconds
-        durationBeats = event.duration / 1000 / secondsPerBeat;
+        durationSubdivisions = event.duration / 1000 / secondsPerSubdivision;
       } else if (typeof pitchInfo.duration === 'number') {
-        // pitchInfo.duration is in whole notes
-        durationBeats =
-          pitchInfo.duration * QUARTER_NOTES_PER_WHOLE * BEATS_PER_QUARTER_NOTE;
+        // pitchInfo.duration is in whole notes, convert to subdivisions
+        durationSubdivisions = pitchInfo.duration * wholeNoteInSubdivisions;
       } else {
-        durationBeats = 0;
+        durationSubdivisions = 0;
       }
 
-      const effectiveEnd = Math.max(startBeat + durationBeats, startBeat);
-      if (effectiveEnd > maxEndBeats) {
-        maxEndBeats = effectiveEnd;
+      const effectiveEnd = Math.max(
+        startSubdivision + durationSubdivisions,
+        startSubdivision
+      );
+      if (effectiveEnd > maxEndSubdivisions) {
+        maxEndSubdivisions = effectiveEnd;
       }
 
       const startChar = Array.isArray(event.startCharArray)
@@ -293,8 +349,8 @@ export const buildTimingDerivedData = (
 
       notes.push({
         pitch: pitchInfo.pitch,
-        startBeat,
-        durationBeats,
+        startSubdivision,
+        durationSubdivisions,
         velocity: typeof pitchInfo.volume === 'number' ? pitchInfo.volume : 80,
         source: {
           startChar:
@@ -311,21 +367,23 @@ export const buildTimingDerivedData = (
   });
 
   // Generate fallback measure boundaries if none were found
-  if (measureBoundaries.length === 0 && beatsPerMeasure > 0) {
+  if (measureBoundaries.length === 0 && subdivisionsPerMeasure > 0) {
     for (
-      let boundary = beatsPerMeasure;
-      boundary <= maxEndBeats + 1e-6;
-      boundary += beatsPerMeasure
+      let boundary = subdivisionsPerMeasure;
+      boundary <= maxEndSubdivisions + 1e-6;
+      boundary += subdivisionsPerMeasure
     ) {
       addBoundary(measureBoundaries, boundary);
     }
   }
 
   if (typeof console !== 'undefined' && typeof console.debug === 'function') {
-    console.debug('[abcTiming] timeline summary (beats)', {
-      totalBeats: Number(maxEndBeats.toFixed(4)),
-      secondsPerBeat: Number(secondsPerBeat.toFixed(4)),
-      beatsPerMeasure,
+    console.debug('[abcTiming] timeline summary (subdivisions)', {
+      totalSubdivisions: Number(maxEndSubdivisions.toFixed(4)),
+      secondsPerSubdivision: Number(secondsPerSubdivision.toFixed(4)),
+      subdivisionsPerMeasure,
+      subdivisionUnit,
+      subdivisionsPerBeat,
       measurePreview: measureBoundaries
         .slice(0, 5)
         .map((v) => Number(v.toFixed(4))),
@@ -338,10 +396,14 @@ export const buildTimingDerivedData = (
     charMap: mapping,
     timeline: {
       notes,
-      totalBeats: maxEndBeats,
-      beatsPerMeasure,
+      totalSubdivisions: maxEndSubdivisions,
+      subdivisionsPerMeasure,
+      subdivisionUnit,
+      subdivisionsPerBeat,
       measureBoundaries,
     },
-    secondsPerBeat,
+    secondsPerSubdivision,
+    // Deprecated alias for backward compatibility
+    secondsPerBeat: secondsPerSubdivision,
   };
 };

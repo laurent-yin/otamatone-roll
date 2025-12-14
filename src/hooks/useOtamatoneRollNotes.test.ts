@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import abcjs from 'abcjs';
 import { TimingEvent } from '../utils/abcTiming';
-import { getBeatBoundaries } from '../types/music';
+import { getSubdivisionBoundaries } from '../types/music';
 import {
-  DEFAULT_SECONDS_PER_BEAT,
+  DEFAULT_SECONDS_PER_SUBDIVISION,
   buildTimelineFromNotation,
 } from './useOtamatoneRollNotes';
 
@@ -32,21 +32,21 @@ describe('buildTimelineFromNotation', () => {
     const result = buildTimelineFromNotation('');
 
     expect(result.notes).toEqual([]);
-    expect(result.totalBeats).toBe(0);
-    expect(result.secondsPerBeat).toBe(DEFAULT_SECONDS_PER_BEAT);
+    expect(result.totalSubdivisions).toBe(0);
+    expect(result.secondsPerSubdivision).toBe(DEFAULT_SECONDS_PER_SUBDIVISION);
   });
 
-  it('derives beat-based notes from abcjs timing callbacks', () => {
+  it('derives subdivision-based notes from abcjs timing callbacks', () => {
     const visualObj = {
       setUpAudio: vi.fn(),
       getMeterFraction: () => ({ num: 4, den: 4 }),
-      millisecondsPerMeasure: () => 2000, // 2000ms per measure = 500ms per beat at 4/4
+      millisecondsPerMeasure: () => 2000, // 2000ms per measure = 500ms per subdivision at 4/4
     };
     getRenderAbcMock().mockReturnValue([visualObj]);
 
-    // At 120 BPM, 1 beat = 500ms
-    // First event: 3 notes starting at 0ms, duration 1000ms (2 beats)
-    // Second event: 1 note starting at 1000ms (beat 2), duration 500ms (1 beat)
+    // At 120 BPM, 1 subdivision = 500ms
+    // First event: 3 notes starting at 0ms, duration 1000ms (2 subdivisions)
+    // Second event: 1 note starting at 1000ms (subdivision 2), duration 500ms (1 subdivision)
     const timingCallbacksInstance = {
       replaceTarget: vi.fn(),
       noteTimings: [
@@ -81,40 +81,42 @@ describe('buildTimelineFromNotation', () => {
     // Should have 4 notes total (3 from chord + 1 single)
     expect(timeline.notes).toHaveLength(4);
 
-    // First chord - 3 notes starting at beat 0
+    // First chord - 3 notes starting at subdivision 0
     const chordNotes = timeline.notes
-      .filter((note) => note.startBeat === 0)
+      .filter((note) => note.startSubdivision === 0)
       .map((note) => note.pitch)
       .sort();
     expect(chordNotes).toEqual([60, 64, 67]);
 
-    // Chord notes should have durationBeats = 2 (1000ms / 500ms per beat)
+    // Chord notes should have durationSubdivisions = 2 (1000ms / 500ms per subdivision)
     const chordNote = timeline.notes.find(
-      (note) => note.pitch === 60 && note.startBeat === 0
+      (note) => note.pitch === 60 && note.startSubdivision === 0
     );
-    expect(chordNote?.durationBeats).toBeCloseTo(2);
+    expect(chordNote?.durationSubdivisions).toBeCloseTo(2);
 
-    // Second note at beat 2
+    // Second note at subdivision 2
     const laterNote = timeline.notes.find((note) => note.pitch === 72);
-    expect(laterNote?.startBeat).toBeCloseTo(2);
-    expect(laterNote?.durationBeats).toBeCloseTo(1);
+    expect(laterNote?.startSubdivision).toBeCloseTo(2);
+    expect(laterNote?.durationSubdivisions).toBeCloseTo(1);
 
     // Tempo info
-    expect(timeline.secondsPerBeat).toBeCloseTo(0.5); // 60/120 = 0.5
+    expect(timeline.secondsPerSubdivision).toBeCloseTo(0.5); // 60/120 = 0.5
 
-    // Beat boundaries start at 1 (no marker needed at beat 0)
-    expect(getBeatBoundaries(timeline.totalBeats)).toEqual([1, 2]);
+    // Subdivision boundaries start at 1 (no marker needed at subdivision 0)
+    expect(getSubdivisionBoundaries(timeline.totalSubdivisions)).toEqual([
+      1, 2,
+    ]);
   });
 
   it('handles notation with explicit tempo', () => {
     const visualObj = {
       setUpAudio: vi.fn(),
       getMeterFraction: () => ({ num: 4, den: 4 }),
-      millisecondsPerMeasure: () => 1000, // 1000ms per measure = 250ms per beat at 4/4
+      millisecondsPerMeasure: () => 1000, // 1000ms per measure = 250ms per subdivision at 4/4
     };
     getRenderAbcMock().mockReturnValue([visualObj]);
 
-    // At 240 BPM (quarter note = 240), 1 beat = 250ms
+    // At 240 BPM (quarter note = 240), 1 subdivision = 250ms
     const timingCallbacksInstance = {
       replaceTarget: vi.fn(),
       noteTimings: [
@@ -139,14 +141,14 @@ describe('buildTimelineFromNotation', () => {
     const timeline = buildTimelineFromNotation('ignored');
 
     expect(timeline.notes).toHaveLength(1);
-    expect(timeline.notes[0]?.startBeat).toBe(0);
-    expect(timeline.notes[0]?.durationBeats).toBeCloseTo(1);
-    expect(timeline.secondsPerBeat).toBeCloseTo(0.25); // 60/240 = 0.25
+    expect(timeline.notes[0]?.startSubdivision).toBe(0);
+    expect(timeline.notes[0]?.durationSubdivisions).toBeCloseTo(1);
+    expect(timeline.secondsPerSubdivision).toBeCloseTo(0.25); // 60/240 = 0.25
   });
 
-  it('timeline is invariant - beat values do not depend on playback speed', () => {
+  it('timeline is invariant - subdivision values do not depend on playback speed', () => {
     // This test verifies the key architectural property:
-    // The timeline stores beats, which are invariant to tempo/warp changes
+    // The timeline stores subdivisions, which are invariant to tempo/warp changes
     const visualObj = {
       setUpAudio: vi.fn(),
       getMeterFraction: () => ({ num: 4, den: 4 }),
@@ -185,16 +187,16 @@ describe('buildTimelineFromNotation', () => {
 
     const timeline = buildTimelineFromNotation('ignored');
 
-    // Beat values are invariant
-    expect(timeline.notes[0]?.startBeat).toBe(0);
-    expect(timeline.notes[0]?.durationBeats).toBeCloseTo(1);
-    expect(timeline.notes[1]?.startBeat).toBeCloseTo(1);
-    expect(timeline.notes[1]?.durationBeats).toBeCloseTo(1);
-    expect(timeline.totalBeats).toBeCloseTo(2);
+    // Subdivision values are invariant
+    expect(timeline.notes[0]?.startSubdivision).toBe(0);
+    expect(timeline.notes[0]?.durationSubdivisions).toBeCloseTo(1);
+    expect(timeline.notes[1]?.startSubdivision).toBeCloseTo(1);
+    expect(timeline.notes[1]?.durationSubdivisions).toBeCloseTo(1);
+    expect(timeline.totalSubdivisions).toBeCloseTo(2);
 
-    // The secondsPerBeat is the baseline tempo from the notation
-    // When playback speed changes, only secondsPerBeat would change,
-    // but note startBeat/durationBeats stay the same
-    expect(timeline.secondsPerBeat).toBeCloseTo(0.5);
+    // The secondsPerSubdivision is the baseline tempo from the notation
+    // When playback speed changes, only secondsPerSubdivision would change,
+    // but note startSubdivision/durationSubdivisions stay the same
+    expect(timeline.secondsPerSubdivision).toBeCloseTo(0.5);
   });
 });

@@ -6,21 +6,26 @@ import {
   buildTimingDerivedData,
   TimingEvent,
   VisualObjWithTimings,
+  DEFAULT_SECONDS_PER_SUBDIVISION,
   DEFAULT_SECONDS_PER_BEAT,
   TimingDerivedData,
 } from '../utils/abcTiming';
 
 /**
  * Result of the useOtamatoneRollNotes hook.
- * Contains the beat-based timeline (invariant) plus tempo info for playback.
+ * Contains the subdivision-based timeline (invariant) plus tempo info for playback.
  */
 export type OtamatoneRollNotesResult = NoteTimeline & {
-  /** Baseline tempo from the ABC notation (seconds per beat) */
+  /** Baseline tempo from the ABC notation (seconds per subdivision) */
+  secondsPerSubdivision: number;
+  /**
+   * @deprecated Use secondsPerSubdivision instead
+   */
   secondsPerBeat: number;
 };
 
 // Re-export for backward compatibility
-export { DEFAULT_SECONDS_PER_BEAT };
+export { DEFAULT_SECONDS_PER_SUBDIVISION, DEFAULT_SECONDS_PER_BEAT };
 
 /**
  * Extended TuneObject with setUpAudio method for preparing timing data.
@@ -42,17 +47,20 @@ const isBrowser = () => typeof document !== 'undefined';
 
 const createEmptyTimeline = (): NoteTimeline => ({
   notes: [],
-  totalBeats: 0,
-  beatsPerMeasure: 4,
+  totalSubdivisions: 0,
+  subdivisionsPerMeasure: 4,
+  subdivisionUnit: 4,
+  subdivisionsPerBeat: 1,
   measureBoundaries: [],
 });
 
 const createEmptyResult = (): OtamatoneRollNotesResult => ({
   ...createEmptyTimeline(),
-  secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
+  secondsPerSubdivision: DEFAULT_SECONDS_PER_SUBDIVISION,
+  secondsPerBeat: DEFAULT_SECONDS_PER_BEAT, // deprecated alias
 });
 
-const extractSecondsPerBeat = (qpm?: number): number | undefined => {
+const extractSecondsPerSubdivision = (qpm?: number): number | undefined => {
   if (typeof qpm === 'number' && Number.isFinite(qpm) && qpm > 0) {
     return 60 / qpm;
   }
@@ -79,6 +87,7 @@ const deriveTimelineFromTimingData = (
     return {
       charMap: {},
       timeline: createEmptyTimeline(),
+      secondsPerSubdivision: DEFAULT_SECONDS_PER_SUBDIVISION,
       secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
     };
   }
@@ -96,16 +105,17 @@ const deriveTimelineFromTimingData = (
     return {
       charMap: {},
       timeline: createEmptyTimeline(),
+      secondsPerSubdivision: DEFAULT_SECONDS_PER_SUBDIVISION,
       secondsPerBeat: DEFAULT_SECONDS_PER_BEAT,
     };
   }
   return buildTimingDerivedData(visualObj, timings, {
-    secondsPerBeat: extractSecondsPerBeat(callbacks.qpm),
+    secondsPerSubdivision: extractSecondsPerSubdivision(callbacks.qpm),
   });
 };
 
 /**
- * Builds a beat-based timeline directly from ABC notation string.
+ * Builds a subdivision-based timeline directly from ABC notation string.
  * This is a standalone function (not a hook) for use outside React components.
  *
  * Creates a hidden DOM container, renders the ABC notation with abcjs,
@@ -113,12 +123,12 @@ const deriveTimelineFromTimingData = (
  * invariant to tempo changes.
  *
  * @param notation - ABC notation string
- * @returns Beat-based timeline with notes, totalBeats, and secondsPerBeat
+ * @returns Subdivision-based timeline with notes, totalSubdivisions, and secondsPerSubdivision
  *
  * @example
  * const timeline = buildTimelineFromNotation('X:1\nK:C\nCDEF|');
  * console.log(timeline.notes.length); // 4
- * console.log(timeline.totalBeats); // 4
+ * console.log(timeline.totalSubdivisions); // 4
  */
 export const buildTimelineFromNotation = (
   notation: string
@@ -164,7 +174,8 @@ export const buildTimelineFromNotation = (
     const derived = deriveTimelineFromTimingData(visualObj, timingCallbacks);
     return {
       ...derived.timeline,
-      secondsPerBeat: derived.secondsPerBeat,
+      secondsPerSubdivision: derived.secondsPerSubdivision,
+      secondsPerBeat: derived.secondsPerBeat, // deprecated alias
     };
   } catch (error) {
     console.error('Error deriving timeline from abcjs timing data', error);
@@ -177,11 +188,11 @@ export const buildTimelineFromNotation = (
 };
 
 /**
- * Hook to get the beat-based note timeline from ABC notation.
+ * Hook to get the subdivision-based note timeline from ABC notation.
  * The timeline is computed once and is invariant to tempo/warp changes.
  *
  * @param notation - The ABC notation string
- * @returns The beat-based timeline plus tempo info
+ * @returns The subdivision-based timeline plus tempo info
  */
 export const useOtamatoneRollNotes = (
   notation: string

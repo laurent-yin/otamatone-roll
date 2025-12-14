@@ -1,4 +1,4 @@
-import { NoteTimeline, getBeatBoundaries } from '../types/music';
+import { NoteTimeline, getSubdivisionBoundaries } from '../types/music';
 import { midiToFrequency, stemPosition } from './frequency';
 
 const clamp = (value: number, min: number, max: number) => {
@@ -19,7 +19,7 @@ const FALLBACK_MAX_FREQUENCY = midiToFrequency(84);
  * Generates a PNG data URL preview image of the note timeline.
  * Used to display a minimap in the audio progress bar.
  *
- * @param timeline - The beat-based note timeline to visualize
+ * @param timeline - The subdivision-based note timeline to visualize
  * @param options - Rendering options
  * @param options.width - Image width in CSS pixels (default: 960)
  * @param options.height - Image height in CSS pixels (default: 120)
@@ -45,8 +45,8 @@ export const buildTimelinePreviewImage = (
     !timeline ||
     !Array.isArray(timeline.notes) ||
     timeline.notes.length === 0 ||
-    typeof timeline.totalBeats !== 'number' ||
-    timeline.totalBeats <= 0
+    typeof timeline.totalSubdivisions !== 'number' ||
+    timeline.totalSubdivisions <= 0
   ) {
     return null;
   }
@@ -64,11 +64,11 @@ export const buildTimelinePreviewImage = (
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
 
-  const { notes, totalBeats } = timeline;
+  const { notes, totalSubdivisions } = timeline;
   const measureBoundaries = Array.isArray(timeline.measureBoundaries)
     ? timeline.measureBoundaries
     : [];
-  const beatBoundaries = getBeatBoundaries(totalBeats);
+  const subdivisionBoundaries = getSubdivisionBoundaries(totalSubdivisions);
 
   const minPitch = notes.reduce(
     (acc, note) => Math.min(acc, note.pitch),
@@ -98,8 +98,12 @@ export const buildTimelinePreviewImage = (
   const verticalPadding = height * 0.15;
   const usableHeight = Math.max(1, height - verticalPadding * 2);
 
-  const drawBoundarySet = (beats: number[], opacity: number, dash = false) => {
-    if (beats.length === 0) {
+  const drawBoundarySet = (
+    subdivisions: number[],
+    opacity: number,
+    dash = false
+  ) => {
+    if (subdivisions.length === 0) {
       return;
     }
     ctx.save();
@@ -108,11 +112,11 @@ export const buildTimelinePreviewImage = (
     if (dash) {
       ctx.setLineDash([4, 4]);
     }
-    beats.forEach((beat) => {
-      if (typeof beat !== 'number' || beat <= 0) {
+    subdivisions.forEach((subdivision) => {
+      if (typeof subdivision !== 'number' || subdivision <= 0) {
         return;
       }
-      const ratio = clamp(beat / totalBeats, 0, 1);
+      const ratio = clamp(subdivision / totalSubdivisions, 0, 1);
       const x = ratio * width;
       ctx.beginPath();
       ctx.moveTo(x, verticalPadding * 0.3);
@@ -123,7 +127,7 @@ export const buildTimelinePreviewImage = (
   };
 
   drawBoundarySet(measureBoundaries, 0.28);
-  drawBoundarySet(beatBoundaries, 0.12, true);
+  drawBoundarySet(subdivisionBoundaries, 0.12, true);
 
   ctx.save();
   const gradient = ctx.createLinearGradient(0, 0, 0, height);
@@ -141,9 +145,10 @@ export const buildTimelinePreviewImage = (
     if (!note) {
       return;
     }
-    const startRatio = clamp(note.startBeat / totalBeats, 0, 1);
+    const startRatio = clamp(note.startSubdivision / totalSubdivisions, 0, 1);
     const endRatio = clamp(
-      (note.startBeat + Math.max(0, note.durationBeats)) / totalBeats,
+      (note.startSubdivision + Math.max(0, note.durationSubdivisions)) /
+        totalSubdivisions,
       startRatio + 0.001,
       1
     );

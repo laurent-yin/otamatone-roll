@@ -14,13 +14,14 @@ Otamatone Roll is a web app that visualizes ABC notation music with an otamatone
 
 ## Key Architectural Principles
 
-### Beat-Based Timing (Critical!)
+### Subdivision-Based Timing (Critical!)
 
-All timing is stored in **beats**, not seconds. This makes the timeline invariant to tempo changes.
+All timing is stored in **subdivisions**, not seconds. A subdivision is the base rhythmic unit defined by the meter denominator (e.g., quarter notes in 4/4, eighth notes in 6/8). This makes the timeline invariant to tempo changes.
 
-- `NoteTimeline.notes[].startBeat` / `durationBeats` - beat-based
-- `secondsPerBeat` is computed separately for playback conversion
-- When tempo/warp changes, only `secondsPerBeat` updates—timeline stays the same
+- `NoteTimeline.notes[].startSubdivision` / `durationSubdivisions` - subdivision-based
+- `secondsPerSubdivision` is computed separately for playback conversion
+- When tempo/warp changes, only `secondsPerSubdivision` updates—timeline stays the same
+- For compound meters (6/8, 12/8), `subdivisionsPerBeat` indicates how many subdivisions form one perceptible beat (e.g., 3 for compound time)
 
 ### State Management
 
@@ -48,13 +49,13 @@ AbcEditor → appStore.notation → AbcNotationViewer → abcjs rendering
 
 ## Key Files
 
-| Purpose      | File                               |
-| ------------ | ---------------------------------- |
-| Global state | `src/store/appStore.ts`            |
-| Core types   | `src/types/music.ts`               |
-| ABC → beats  | `src/utils/abcTiming.ts`           |
-| Playback     | `src/services/abcPlayback.ts`      |
-| Piano roll   | `src/components/OtamatoneRoll.tsx` |
+| Purpose            | File                               |
+| ------------------ | ---------------------------------- |
+| Global state       | `src/store/appStore.ts`            |
+| Core types         | `src/types/music.ts`               |
+| ABC → subdivisions | `src/utils/abcTiming.ts`           |
+| Playback           | `src/services/abcPlayback.ts`      |
+| Piano roll         | `src/components/OtamatoneRoll.tsx` |
 
 ## Testing
 
@@ -80,5 +81,5 @@ npm run test:browser   # Integration tests (Chromium)
 ### Modifying piano roll visualization
 
 1. Edit `src/components/OtamatoneRoll.tsx`
-2. All timing uses beats—convert with `secondsToBeats()` if needed
+2. All timing uses subdivisions—convert with `secondsToSubdivisions()` if needed
 3. Frequency range comes from `lowestNoteHz`/`highestNoteHz` in store

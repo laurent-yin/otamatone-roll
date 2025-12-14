@@ -32,8 +32,18 @@ export interface AppState {
   noteTimeline: NoteTimeline | null;
   setNoteTimeline: (timeline: NoteTimeline | null) => void;
 
-  // Tempo
+  // Tempo (seconds per subdivision for playback conversion)
+  currentSecondsPerSubdivision: number | undefined;
+  setCurrentSecondsPerSubdivision: (
+    secondsPerSubdivision: number | undefined
+  ) => void;
+  /**
+   * @deprecated Use currentSecondsPerSubdivision instead
+   */
   currentSecondsPerBeat: number | undefined;
+  /**
+   * @deprecated Use setCurrentSecondsPerSubdivision instead
+   */
   setCurrentSecondsPerBeat: (secondsPerBeat: number | undefined) => void;
 
   // Frequency range settings
@@ -99,9 +109,19 @@ export const useAppStore = create<AppState>()(
         setNoteTimeline: (noteTimeline) => set({ noteTimeline }),
 
         // Tempo
+        currentSecondsPerSubdivision: undefined,
+        setCurrentSecondsPerSubdivision: (currentSecondsPerSubdivision) =>
+          set({
+            currentSecondsPerSubdivision,
+            currentSecondsPerBeat: currentSecondsPerSubdivision,
+          }),
+        // Deprecated aliases
         currentSecondsPerBeat: undefined,
         setCurrentSecondsPerBeat: (currentSecondsPerBeat) =>
-          set({ currentSecondsPerBeat }),
+          set({
+            currentSecondsPerBeat,
+            currentSecondsPerSubdivision: currentSecondsPerBeat,
+          }),
 
         // Frequency range
         lowestNoteHz: DEFAULT_LOWEST_FREQUENCY,
