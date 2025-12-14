@@ -1,5 +1,23 @@
 {
     "navigationFallback": {
-        "rewrite": "/index.html"
+        "rewrite": "/index.html",
+        "exclude": [
+            "/assets/*",
+            "*.js",
+            "*.ts",
+            "*.tsx",
+            "*.css",
+            "*.json",
+            "*.ico",
+            "*.png",
+            "*.jpg",
+            "*.jpeg",
+            "*.gif",
+            "*.svg",
+            "*.woff",
+            "*.woff2",
+            "*.ttf",
+            "*.eot"
+        ]
     }
 }
