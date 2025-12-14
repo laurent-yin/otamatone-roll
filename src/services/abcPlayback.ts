@@ -93,7 +93,10 @@ type SynthControllerLike = {
   restart?: () => void;
   seek?: (percent: number, units?: number | string) => void;
   setWarp?: (warp: number) => Promise<unknown>;
+  /** Current tempo in QPM - rounded by abcjs, used only for display */
   currentTempo?: number;
+  /** Warp percentage (100 = normal, 50 = half speed). Used for precise tempo calculation */
+  warp?: number;
   percent?: number;
   isStarted?: boolean;
 };
@@ -177,8 +180,9 @@ export class AbcPlaybackController {
   private resetButtonCleanup: (() => void) | null = null;
   private audioDataPrepared = false;
 
-  // Cached subdivision unit for tempo calculations (avoids rebuilding timeline on warp change)
-  private cachedSubdivisionUnit: number = 4;
+  // Cached subdivision info for tempo calculations (avoids rebuilding timeline on warp change)
+  private cachedSubdivisionsPerMeasure: number = 4;
+  private cachedBeatsPerMeasure: number = 4;
 
   constructor(config: AbcPlaybackConfig) {
     this.notation = config.notation;
@@ -270,9 +274,8 @@ export class AbcPlaybackController {
       return;
     }
 
-    // NOTE: event.milliseconds is the REAL elapsed time, AFFECTED by warp.
-    // At 50% warp, a note at subdivision 2 will fire at ~2x the original milliseconds.
-    // To convert back to subdivisions, divide by the CURRENT (warped) secondsPerSubdivision.
+    // Use event.milliseconds from the timing callback.
+    // The audio and timing callbacks use precise tempo (not rounded currentTempo).
     const milliseconds = (event as { milliseconds?: number }).milliseconds;
     if (typeof milliseconds === 'number' && Number.isFinite(milliseconds)) {
       const currentTime = milliseconds / 1000;
@@ -385,8 +388,13 @@ export class AbcPlaybackController {
       timings as TimingEvent[]
     );
 
-    // Cache the subdivision unit for tempo calculations (avoids rebuilding timeline on warp change)
-    this.cachedSubdivisionUnit = derived.timeline.subdivisionUnit || 4;
+    // Cache subdivision info for tempo calculations (avoids rebuilding timeline on warp change)
+    this.cachedSubdivisionsPerMeasure =
+      derived.timeline.subdivisionsPerMeasure || 4;
+    // Beats per measure = subdivisionsPerMeasure / subdivisionsPerBeat
+    const subdivisionsPerBeat = derived.timeline.subdivisionsPerBeat || 1;
+    this.cachedBeatsPerMeasure =
+      this.cachedSubdivisionsPerMeasure / subdivisionsPerBeat;
 
     // Calculate effective seconds per subdivision based on current tempo (which includes warp)
     const effectiveSecondsPerSubdivision =
@@ -399,6 +407,7 @@ export class AbcPlaybackController {
       totalSubdivisions: derived.timeline.totalSubdivisions,
       secondsPerSubdivision: effectiveSecondsPerSubdivision,
       originalSecondsPerSubdivision: derived.secondsPerSubdivision,
+      warp: this.synthControl?.warp,
       currentTempo: this.synthControl?.currentTempo,
     });
 
@@ -423,25 +432,47 @@ export class AbcPlaybackController {
 
   /**
    * Calculate effective seconds per subdivision based on current tempo.
-   * Uses synthControl.currentTempo which includes warp adjustments.
    *
-   * @param fallback - Fallback value if currentTempo is not available
+   * Uses precise calculation from visualObj.millisecondsPerMeasure() and warp.
+   * The audio playback uses this same precise timing internally.
+   * Note: currentTempo is only used for display (rounded to integer) and should
+   * NOT be used for timing calculations.
+   *
+   * @param fallback - Fallback value if tempo cannot be calculated
    */
   private calculateEffectiveSecondsPerSubdivision(fallback: number): number {
+    // Get warp from synth controller (defaults to 100%)
+    const warp =
+      this.synthControl &&
+      typeof this.synthControl.warp === 'number' &&
+      this.synthControl.warp > 0
+        ? this.synthControl.warp
+        : 100;
+
+    // Get original millisecondsPerMeasure from visualObj (unaffected by warp)
+    const originalMsPerMeasure =
+      typeof this.visualObj?.millisecondsPerMeasure === 'function'
+        ? this.visualObj.millisecondsPerMeasure()
+        : undefined;
+
     if (
-      !this.synthControl ||
-      typeof this.synthControl.currentTempo !== 'number' ||
-      this.synthControl.currentTempo <= 0
+      typeof originalMsPerMeasure !== 'number' ||
+      !Number.isFinite(originalMsPerMeasure) ||
+      originalMsPerMeasure <= 0
     ) {
       return fallback;
     }
 
-    // currentTempo is QPM - convert to seconds per quarter note, then to seconds per subdivision
-    const secondsPerQuarterNote = 60 / this.synthControl.currentTempo;
-    // subdivisionUnit is the meter denominator (4 for quarter notes, 8 for eighth notes)
-    // For a quarter note (unit=4): secondsPerSubdivision = secondsPerQuarterNote
-    // For an eighth note (unit=8): secondsPerSubdivision = secondsPerQuarterNote / 2
-    return secondsPerQuarterNote * (4 / this.cachedSubdivisionUnit);
+    // Calculate effective ms per measure with warp applied
+    // Audio uses: effectiveMsPerMeasure = originalMsPerMeasure * 100 / warp
+    const effectiveMsPerMeasure = (originalMsPerMeasure * 100) / warp;
+
+    // Convert to seconds per subdivision
+    const subdivisionsPerMeasure = this.cachedSubdivisionsPerMeasure || 4;
+    const secondsPerSubdivision =
+      effectiveMsPerMeasure / 1000 / subdivisionsPerMeasure;
+
+    return secondsPerSubdivision;
   }
 
   /**
@@ -456,8 +487,9 @@ export class AbcPlaybackController {
 
     console.log(`${logPrefix} Tempo changed (timeline unchanged)`, {
       secondsPerSubdivision: effectiveSecondsPerSubdivision,
+      warp: this.synthControl?.warp,
       currentTempo: this.synthControl?.currentTempo,
-      subdivisionUnit: this.cachedSubdivisionUnit,
+      subdivisionsPerMeasure: this.cachedSubdivisionsPerMeasure,
     });
 
     this.callbacks.onSecondsPerBeatChange?.(effectiveSecondsPerSubdivision);

@@ -9,7 +9,7 @@ import {
   stemPosition,
   midiToNoteName,
 } from '../utils/frequency';
-import { NotePlaybackEvent, getBeatBoundaries } from '../types/music';
+import { getBeatBoundaries } from '../types/music';
 
 const PLAYHEAD_VERTICAL_INSET = 12;
 const PLAYABLE_EDGE_RATIO = 0.03;
@@ -28,7 +28,6 @@ const MIN_PLAYHEAD_FRACTION = 0.12;
 const BEATS_PER_VERTICAL_SPAN = 4;
 const FALLBACK_PIXELS_PER_SUBDIVISION = 50;
 const NOTE_THICKNESS_RATIO = 0.7;
-const CHORD_ALIGNMENT_TOLERANCE_SUBDIVISIONS = 0.01; // in subdivisions
 
 const getTimestamp = () =>
   typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -99,7 +98,6 @@ export const OtamatoneRoll: React.FC = () => {
   // Read state from store
   const currentTime = useAppStore((state) => state.currentTime);
   const isPlaying = useAppStore((state) => state.isPlaying);
-  const activeNoteEvent = useAppStore((state) => state.activeNoteEvent);
   const currentSecondsPerSubdivision = useAppStore(
     (state) => state.currentSecondsPerSubdivision
   );
@@ -152,8 +150,6 @@ export const OtamatoneRoll: React.FC = () => {
   const syncedSubdivisionRef = useRef(secondsToSubdivisions(currentTime) ?? 0);
   const syncedTimestampRef = useRef<number>(0);
   const isPlayingRef = useRef(isPlaying);
-  const activeNoteIndexRef = useRef<number | null>(null);
-  const latestEventIdRef = useRef(0);
   const measureBoundaryLogRef = useRef('');
 
   const minFrequency = useMemo(() => {
@@ -198,27 +194,6 @@ export const OtamatoneRoll: React.FC = () => {
     };
   }, [minFrequency, maxFrequency]);
 
-  // Map from startChar to note index (for highlighting)
-  const noteIndexByStartChar = useMemo(() => {
-    const map = new Map<number, number>();
-    notes.forEach((note, index) => {
-      const startChar = note.source?.startChar;
-      if (typeof startChar !== 'number') {
-        return;
-      }
-      const existingIndex = map.get(startChar);
-      if (typeof existingIndex !== 'number') {
-        map.set(startChar, index);
-        return;
-      }
-      const existingNote = notes[existingIndex];
-      if (!existingNote || note.pitch > existingNote.pitch) {
-        map.set(startChar, index);
-      }
-    });
-    return map;
-  }, [notes]);
-
   // Use the note's startSubdivision directly - it's already invariant to tempo changes.
   // Note: noteCharTimes stores seconds at original tempo (for cursor sync during playback),
   // but we don't use it here because note positions are already correct in subdivisions.
@@ -239,74 +214,6 @@ export const OtamatoneRoll: React.FC = () => {
     });
     return maxEnd;
   }, [notes, noteStartSubdivisions, totalSubdivisions]);
-
-  // Find the note index for a playback event
-  const findNoteIndexForEvent = useCallback(
-    (event: NotePlaybackEvent): number | null => {
-      const isChordEvent = event.midiPitches.length > 1;
-
-      if (!isChordEvent && typeof event.startChar === 'number') {
-        const match = noteIndexByStartChar.get(event.startChar);
-        if (typeof match === 'number') {
-          return match;
-        }
-      }
-
-      const eventSubdivision = secondsToSubdivisions(event.timeSeconds);
-
-      if (event.midiPitches.length > 0) {
-        const midiSet = new Set(event.midiPitches);
-        const chordMaxPitch = event.midiPitches.reduce(
-          (max, value) =>
-            typeof value === 'number' ? Math.max(max, value) : max,
-          Number.NEGATIVE_INFINITY
-        );
-        let bestIndex: number | null = null;
-        let smallestDelta = Number.POSITIVE_INFINITY;
-        let bestPitch = -Infinity;
-        let bestPitchPriority = -1;
-
-        notes.forEach((note, index) => {
-          if (!midiSet.has(note.pitch)) {
-            return;
-          }
-          const adjustedStart =
-            noteStartSubdivisions[index] ?? note.startSubdivision;
-          const delta =
-            typeof eventSubdivision === 'number'
-              ? Math.abs(adjustedStart - eventSubdivision)
-              : Number.POSITIVE_INFINITY;
-          const pitchPriority = note.pitch === chordMaxPitch ? 1 : 0;
-          const improvesPitchPriority = pitchPriority > bestPitchPriority;
-          const matchesPitchPriority = pitchPriority === bestPitchPriority;
-          const isClearlyCloser =
-            delta + CHORD_ALIGNMENT_TOLERANCE_SUBDIVISIONS < smallestDelta;
-          const isSimilarTiming =
-            Math.abs(delta - smallestDelta) <=
-            CHORD_ALIGNMENT_TOLERANCE_SUBDIVISIONS;
-          if (
-            improvesPitchPriority ||
-            (matchesPitchPriority &&
-              (isClearlyCloser ||
-                (isSimilarTiming &&
-                  (bestIndex === null || note.pitch > bestPitch))))
-          ) {
-            bestPitchPriority = pitchPriority;
-            smallestDelta = delta;
-            bestIndex = index;
-            bestPitch = note.pitch;
-          }
-        });
-
-        if (bestIndex !== null) {
-          return bestIndex;
-        }
-      }
-
-      return null;
-    },
-    [secondsToSubdivisions, noteIndexByStartChar, notes, noteStartSubdivisions]
-  );
 
   // Get the current display subdivision, accounting for animation
   const getDisplaySubdivision = useCallback(() => {
@@ -537,8 +444,6 @@ export const OtamatoneRoll: React.FC = () => {
       },
     });
 
-    const activeNoteIndex = activeNoteIndexRef.current;
-
     // Draw notes
     ctx.save();
     ctx.beginPath();
@@ -550,7 +455,9 @@ export const OtamatoneRoll: React.FC = () => {
         noteStartSubdivisions[index] ?? note.startSubdivision;
       const subdivisionDiff = adjustedStartSubdivision - currentSubdivision;
       const durationSubdivisions = Math.max(note.durationSubdivisions, 0);
-      const x = playheadX + subdivisionDiff * pixelsPerSubdivision;
+      // Use innerX (left edge of playhead) as the reference point so notes
+      // reach the left edge when audio plays (subdivisionDiff == 0)
+      const x = innerX + subdivisionDiff * pixelsPerSubdivision;
       const noteWidth = durationSubdivisions * pixelsPerSubdivision;
       const noteRight = x + noteWidth;
       const noteFrequency = midiToFrequency(note.pitch);
@@ -573,17 +480,27 @@ export const OtamatoneRoll: React.FC = () => {
         return;
       }
 
-      const isActiveNote =
-        typeof activeNoteIndex === 'number' && index === activeNoteIndex;
+      // Determine note state based on position relative to innerX (left edge of playhead).
+      // Since x = innerX + subdivisionDiff * pixelsPerSubdivision:
+      // - subdivisionDiff > 0: note hasn't reached innerX yet (ahead)
+      // - subdivisionDiff <= 0: note is at or past innerX
+      // - subdivisionDiff + duration > 0: note duration extends past innerX (still playing)
+      const noteAtLeftEdge = subdivisionDiff <= 0;
+      const noteStillPlaying = subdivisionDiff + durationSubdivisions > 0;
+      const isPlaying = noteAtLeftEdge && noteStillPlaying;
 
       let color: string;
-      if (isActiveNote) {
+      if (isPlaying && isPlayingRef.current) {
+        // Currently playing during playback - highlight orange
         color = '#facc15';
-      } else if (subdivisionDiff > 0) {
+      } else if (!noteAtLeftEdge) {
+        // Ahead of playhead - blue
         color = '#4a9eff';
-      } else if (subdivisionDiff + durationSubdivisions > 0) {
+      } else if (noteStillPlaying) {
+        // At playhead but paused - green
         color = '#4ade80';
       } else {
+        // Finished - gray
         color = '#666666';
       }
 
@@ -685,39 +602,42 @@ export const OtamatoneRoll: React.FC = () => {
     }
   }, [isPlaying, renderFrame, effectiveSecondsPerSubdivision]);
 
-  // Handle active note events
+  // Store previous tempo to detect changes
+  const prevSecondsPerSubdivisionRef = useRef(effectiveSecondsPerSubdivision);
+
+  // Handle tempo/warp changes while playing
+  // When tempo changes, we must re-sync the animation to prevent drift
   useEffect(() => {
-    if (!activeNoteEvent) {
-      activeNoteIndexRef.current = null;
+    const prevTempo = prevSecondsPerSubdivisionRef.current;
+    const newTempo = effectiveSecondsPerSubdivision;
+    prevSecondsPerSubdivisionRef.current = newTempo;
+
+    // Only handle if tempo actually changed and we're playing
+    if (prevTempo === newTempo || !isPlayingRef.current) {
       return;
     }
 
-    if (activeNoteEvent.sequenceId <= latestEventIdRef.current) {
-      return;
-    }
+    // Calculate current animated position using the OLD tempo
+    const now = getTimestamp();
+    const elapsedSeconds = (now - syncedTimestampRef.current) / 1000;
+    const elapsedSubdivisions = elapsedSeconds / prevTempo;
+    const currentSubdivision =
+      syncedSubdivisionRef.current + elapsedSubdivisions;
 
-    latestEventIdRef.current = activeNoteEvent.sequenceId;
-    activeNoteIndexRef.current = findNoteIndexForEvent(activeNoteEvent);
+    // Reset sync point to current position with new tempo
+    syncedSubdivisionRef.current = currentSubdivision;
+    syncedTimestampRef.current = now;
 
-    const subdivision = secondsToSubdivisions(activeNoteEvent.timeSeconds);
-    if (typeof subdivision === 'number') {
-      syncedSubdivisionRef.current = subdivision;
-    }
-    syncedTimestampRef.current = getTimestamp();
+    console.debug('[OtamatoneRoll] tempo changed, re-syncing animation', {
+      prevTempo,
+      newTempo,
+      currentSubdivision,
+    });
+  }, [effectiveSecondsPerSubdivision]);
 
-    renderFrame();
-  }, [
-    activeNoteEvent,
-    secondsToSubdivisions,
-    findNoteIndexForEvent,
-    renderFrame,
-  ]);
-
-  // Reset active note when notes change
-  useEffect(() => {
-    activeNoteIndexRef.current = null;
-    latestEventIdRef.current = 0;
-  }, [notes]);
+  // Note: Active note highlighting is now determined directly in the render loop
+  // based on whether the playhead is within the note's duration, rather than
+  // relying on timing callback events (which can have tempo mismatches).
 
   return <canvas ref={canvasRef} className="otamatone-roll-canvas" />;
 };
