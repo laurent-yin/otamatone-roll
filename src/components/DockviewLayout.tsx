@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from 'react';
 import {
   DockviewApi,
   DockviewReact,
@@ -12,6 +12,7 @@ import 'dockview/dist/styles/dockview.css';
 import { AbcEditor } from './AbcEditor';
 import { AbcNotationViewer } from './AbcNotationViewer';
 import { OtamatoneRoll } from './OtamatoneRoll';
+import { useAppStore } from '../store/appStore';
 
 interface DockviewLayoutProps {
   audioContainerId?: string;
@@ -68,9 +69,94 @@ interface ViewMenuProps {
   onToggle: (panel: keyof PanelVisibility) => void;
 }
 
+const FREQUENCY_DEBOUNCE_MS = 500;
+
 const ViewMenu = ({ visibility, onToggle }: ViewMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Otamatone frequency settings
+  const lowestNoteHz = useAppStore((state) => state.lowestNoteHz);
+  const highestNoteHz = useAppStore((state) => state.highestNoteHz);
+  const setLowestNoteHz = useAppStore((state) => state.setLowestNoteHz);
+  const setHighestNoteHz = useAppStore((state) => state.setHighestNoteHz);
+
+  // Local state for input values (for responsive typing)
+  // When null, display from store; when string, display local pending value
+  const [localLowestNoteHz, setLocalLowestNoteHz] = useState<string | null>(
+    null
+  );
+  const [localHighestNoteHz, setLocalHighestNoteHz] = useState<string | null>(
+    null
+  );
+
+  // Debounce refs
+  const lowestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highestDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Compute displayed values: use local state if pending, otherwise use store
+  const displayedLowestNoteHz =
+    localLowestNoteHz !== null
+      ? localLowestNoteHz
+      : Number.isFinite(lowestNoteHz)
+        ? String(lowestNoteHz)
+        : '';
+  const displayedHighestNoteHz =
+    localHighestNoteHz !== null
+      ? localHighestNoteHz
+      : Number.isFinite(highestNoteHz)
+        ? String(highestNoteHz)
+        : '';
+
+  // Cleanup debounce timers on unmount
+  useEffect(() => {
+    return () => {
+      if (lowestDebounceRef.current) clearTimeout(lowestDebounceRef.current);
+      if (highestDebounceRef.current) clearTimeout(highestDebounceRef.current);
+    };
+  }, []);
+
+  const handleLowestNoteChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { value } = event.target;
+    setLocalLowestNoteHz(value);
+
+    if (lowestDebounceRef.current) {
+      clearTimeout(lowestDebounceRef.current);
+    }
+
+    lowestDebounceRef.current = setTimeout(() => {
+      setLocalLowestNoteHz(null);
+      if (value === '') {
+        setLowestNoteHz(Number.NaN);
+        return;
+      }
+      const parsed = Number(value);
+      if (!Number.isNaN(parsed)) {
+        setLowestNoteHz(parsed);
+      }
+    }, FREQUENCY_DEBOUNCE_MS);
+  };
+
+  const handleHighestNoteChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const { value } = event.target;
+    setLocalHighestNoteHz(value);
+
+    if (highestDebounceRef.current) {
+      clearTimeout(highestDebounceRef.current);
+    }
+
+    highestDebounceRef.current = setTimeout(() => {
+      setLocalHighestNoteHz(null);
+      if (value === '') {
+        setHighestNoteHz(Number.NaN);
+        return;
+      }
+      const parsed = Number(value);
+      if (!Number.isNaN(parsed)) {
+        setHighestNoteHz(parsed);
+      }
+    }, FREQUENCY_DEBOUNCE_MS);
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -186,6 +272,39 @@ const ViewMenu = ({ visibility, onToggle }: ViewMenuProps) => {
             </span>
             <span>Otamatone Roll</span>
           </button>
+          <div className="view-menu-header">Otamatone</div>
+          <div className="view-menu-section">
+            <div className="view-menu-field">
+              <label htmlFor="settings-lowest-note">Lowest note (Hz)</label>
+              <div className="view-menu-input-group">
+                <input
+                  id="settings-lowest-note"
+                  type="number"
+                  inputMode="decimal"
+                  min={1}
+                  step="0.1"
+                  value={displayedLowestNoteHz}
+                  onChange={handleLowestNoteChange}
+                />
+                <span className="view-menu-unit">Hz</span>
+              </div>
+            </div>
+            <div className="view-menu-field">
+              <label htmlFor="settings-highest-note">Highest note (Hz)</label>
+              <div className="view-menu-input-group">
+                <input
+                  id="settings-highest-note"
+                  type="number"
+                  inputMode="decimal"
+                  min={1}
+                  step="0.1"
+                  value={displayedHighestNoteHz}
+                  onChange={handleHighestNoteChange}
+                />
+                <span className="view-menu-unit">Hz</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

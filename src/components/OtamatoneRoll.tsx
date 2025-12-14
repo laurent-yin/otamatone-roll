@@ -105,15 +105,9 @@ export const OtamatoneRoll: React.FC = () => {
     (state) => state.currentSecondsPerSubdivision
   );
   const noteTimeline = useAppStore((state) => state.noteTimeline);
-  const getSanitizedLowestNoteHz = useAppStore(
-    (state) => state.getSanitizedLowestNoteHz
-  );
-  const getSanitizedHighestNoteHz = useAppStore(
-    (state) => state.getSanitizedHighestNoteHz
-  );
-
-  const lowestNoteHz = getSanitizedLowestNoteHz();
-  const highestNoteHz = getSanitizedHighestNoteHz();
+  // Subscribe to frequency values to trigger re-render on change
+  const lowestNoteHz = useAppStore((state) => state.lowestNoteHz);
+  const highestNoteHz = useAppStore((state) => state.highestNoteHz);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);

@@ -1,7 +1,11 @@
-import { ChangeEvent, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { DockviewLayout } from './components/DockviewLayout';
 import { useAppStore } from './store/appStore';
 import { buildTimelinePreviewImage } from './utils/timelinePreview';
+import {
+  DEFAULT_HIGHEST_FREQUENCY,
+  DEFAULT_LOWEST_FREQUENCY,
+} from './utils/frequency';
 
 const AUDIO_CONTROLS_ID = 'abc-global-audio-controls';
 const FALLBACK_PROGRESS_HEIGHT_PX = 28;
@@ -28,51 +32,30 @@ const readProgressControlHeight = () => {
 const App = () => {
   // Read state from store
   const noteTimeline = useAppStore((state) => state.noteTimeline);
+  // Subscribe to frequency values to trigger re-render when they change
   const lowestNoteHz = useAppStore((state) => state.lowestNoteHz);
   const highestNoteHz = useAppStore((state) => state.highestNoteHz);
-  const setLowestNoteHz = useAppStore((state) => state.setLowestNoteHz);
-  const setHighestNoteHz = useAppStore((state) => state.setHighestNoteHz);
-  const getSanitizedLowestNoteHz = useAppStore(
-    (state) => state.getSanitizedLowestNoteHz
-  );
-  const getSanitizedHighestNoteHz = useAppStore(
-    (state) => state.getSanitizedHighestNoteHz
-  );
-
-  const sanitizedLowestNoteHz = getSanitizedLowestNoteHz();
-  const sanitizedHighestNoteHz = getSanitizedHighestNoteHz();
 
   const progressPreviewHeight = useMemo(() => readProgressControlHeight(), []);
 
   const timelinePreviewImage = useMemo(() => {
+    // Sanitize values inline to satisfy React Compiler
+    const sanitizedLowest =
+      Number.isFinite(lowestNoteHz) && lowestNoteHz > 0
+        ? lowestNoteHz
+        : DEFAULT_LOWEST_FREQUENCY;
+    const sanitizedHighest =
+      Number.isFinite(highestNoteHz) && highestNoteHz > 0
+        ? highestNoteHz
+        : Math.max(DEFAULT_HIGHEST_FREQUENCY, sanitizedLowest + 1);
+
     return buildTimelinePreviewImage(noteTimeline, {
       width: 1200,
       height: progressPreviewHeight,
-      minFrequency: sanitizedLowestNoteHz,
-      maxFrequency: sanitizedHighestNoteHz,
+      minFrequency: sanitizedLowest,
+      maxFrequency: sanitizedHighest,
     });
-  }, [
-    noteTimeline,
-    sanitizedLowestNoteHz,
-    sanitizedHighestNoteHz,
-    progressPreviewHeight,
-  ]);
-
-  const handleFrequencyChange = (
-    event: ChangeEvent<HTMLInputElement>,
-    setter: (value: number) => void
-  ) => {
-    const { value } = event.target;
-    if (value === '') {
-      setter(Number.NaN);
-      return;
-    }
-    const parsed = Number(value);
-    if (Number.isNaN(parsed)) {
-      return;
-    }
-    setter(parsed);
-  };
+  }, [noteTimeline, lowestNoteHz, highestNoteHz, progressPreviewHeight]);
 
   useEffect(() => {
     if (!isBrowser()) {
@@ -141,56 +124,6 @@ const App = () => {
           </h1>
         </div>
         <div className="app-header-controls">
-          <div
-            className="frequency-form"
-            role="group"
-            aria-label="Otamatone range controls"
-          >
-            <div className="frequency-field">
-              <label htmlFor="lowest-note-input">
-                <span>Lowest note (Hz)</span>
-                <div className="frequency-input">
-                  <input
-                    id="lowest-note-input"
-                    type="number"
-                    inputMode="decimal"
-                    min={1}
-                    step="0.1"
-                    value={Number.isFinite(lowestNoteHz) ? lowestNoteHz : ''}
-                    onChange={(event) =>
-                      handleFrequencyChange(event, setLowestNoteHz)
-                    }
-                    aria-describedby="lowest-note-unit"
-                  />
-                  <span id="lowest-note-unit" className="frequency-unit">
-                    Hz
-                  </span>
-                </div>
-              </label>
-            </div>
-            <div className="frequency-field">
-              <label htmlFor="highest-note-input">
-                <span>Highest note (Hz)</span>
-                <div className="frequency-input">
-                  <input
-                    id="highest-note-input"
-                    type="number"
-                    inputMode="decimal"
-                    min={1}
-                    step="0.1"
-                    value={Number.isFinite(highestNoteHz) ? highestNoteHz : ''}
-                    onChange={(event) =>
-                      handleFrequencyChange(event, setHighestNoteHz)
-                    }
-                    aria-describedby="highest-note-unit"
-                  />
-                  <span id="highest-note-unit" className="frequency-unit">
-                    Hz
-                  </span>
-                </div>
-              </label>
-            </div>
-          </div>
           <div
             id={AUDIO_CONTROLS_ID}
             className="abc-audio-controls app-header-audio-controls"
