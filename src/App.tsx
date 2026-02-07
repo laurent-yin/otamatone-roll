@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { DockviewLayout } from './components/DockviewLayout';
 import { useAppStore } from './store/appStore';
 import { buildTimelinePreviewImage } from './utils/timelinePreview';
+import { usePitchDetection } from './hooks/usePitchDetection';
 import {
   DEFAULT_HIGHEST_FREQUENCY,
   DEFAULT_LOWEST_FREQUENCY,
@@ -30,8 +31,15 @@ const readProgressControlHeight = () => {
 };
 
 const App = () => {
+  // Pitch detection hook — manages mic lifecycle at the top level
+  usePitchDetection();
+
   // Read state from store
   const noteTimeline = useAppStore((state) => state.noteTimeline);
+  const isMicrophoneActive = useAppStore((state) => state.isMicrophoneActive);
+  const setIsMicrophoneActive = useAppStore(
+    (state) => state.setIsMicrophoneActive
+  );
   // Subscribe to frequency values to trigger re-render when they change
   const lowestNoteHz = useAppStore((state) => state.lowestNoteHz);
   const highestNoteHz = useAppStore((state) => state.highestNoteHz);
@@ -124,6 +132,46 @@ const App = () => {
           </h1>
         </div>
         <div className="app-header-controls">
+          <button
+            className={`mic-toggle-button${
+              isMicrophoneActive ? ' mic-active' : ''
+            }`}
+            onClick={() => setIsMicrophoneActive(!isMicrophoneActive)}
+            aria-label={
+              isMicrophoneActive ? 'Disable microphone' : 'Enable microphone'
+            }
+            title={
+              isMicrophoneActive
+                ? 'Microphone active — click to disable'
+                : 'Enable microphone for pitch detection'
+            }
+          >
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="9" y="1" width="6" height="12" rx="3" />
+              <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+              <line x1="12" y1="18" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+              {!isMicrophoneActive && (
+                <line
+                  x1="2"
+                  y1="2"
+                  x2="22"
+                  y2="22"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+              )}
+            </svg>
+          </button>
           <div
             id={AUDIO_CONTROLS_ID}
             className="abc-audio-controls app-header-audio-controls"

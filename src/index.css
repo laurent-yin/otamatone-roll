@@ -82,6 +82,38 @@ body {
   justify-content: flex-end;
 }
 
+/* Microphone toggle button */
+.mic-toggle-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 2px solid #555;
+  border-radius: 8px;
+  background: #2a2a2a;
+  color: #999;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.mic-toggle-button:hover {
+  background: #333;
+  color: #ccc;
+  border-color: #777;
+}
+
+.mic-toggle-button.mic-active {
+  background: #1a3a2a;
+  color: #4ade80;
+  border-color: #4ade80;
+}
+
+.mic-toggle-button.mic-active:hover {
+  background: #1a4a30;
+}
+
 .frequency-form {
   display: flex;
   flex-wrap: wrap;
@@ -646,6 +678,31 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+/* Pitch ball and mic indicator overlays */
+.otamatone-roll-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.otamatone-pitch-ball {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  pointer-events: none;
+  z-index: 10;
+  will-change: left, top, opacity;
+}
+
+.otamatone-roll-mic-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0.6;
+  pointer-events: none;
+  z-index: 10;
 }
 
 @media (max-width: 768px) {

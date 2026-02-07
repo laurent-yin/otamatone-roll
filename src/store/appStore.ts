@@ -4,6 +4,7 @@ import {
   NoteCharTimeMap,
   NotePlaybackEvent,
   NoteTimeline,
+  PitchDetectionResult,
 } from '../types/music';
 import { DEFAULT_ABC_NOTATION } from '../constants/abc-notation';
 import {
@@ -55,6 +56,12 @@ export interface AppState {
   // Computed/sanitized frequency values
   getSanitizedLowestNoteHz: () => number;
   getSanitizedHighestNoteHz: () => number;
+
+  // Pitch detection (microphone input)
+  isMicrophoneActive: boolean;
+  setIsMicrophoneActive: (active: boolean) => void;
+  detectedPitch: PitchDetectionResult | null;
+  setDetectedPitch: (pitch: PitchDetectionResult | null) => void;
 }
 
 // State that should be persisted to localStorage
@@ -129,6 +136,13 @@ export const useAppStore = create<AppState>()(
 
         highestNoteHz: DEFAULT_HIGHEST_FREQUENCY,
         setHighestNoteHz: (highestNoteHz) => set({ highestNoteHz }),
+
+        // Pitch detection
+        isMicrophoneActive: false,
+        setIsMicrophoneActive: (isMicrophoneActive) =>
+          set({ isMicrophoneActive }),
+        detectedPitch: null,
+        setDetectedPitch: (detectedPitch) => set({ detectedPitch }),
 
         // Computed values
         getSanitizedLowestNoteHz: () => {

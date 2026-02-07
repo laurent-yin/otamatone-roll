@@ -9,6 +9,7 @@
   "dependencies": {
     "abcjs": "^6.5.2",
     "dockview": "^4.11.0",
+    "pitchfinder": "^2.3.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zustand": "^5.0.8"

@@ -148,3 +148,38 @@ export const midiToNoteName = (midi: number): string => {
   }
   return `${sharp}/${flat}`;
 };
+
+/**
+ * Computes the interval in cents between two frequencies.
+ * Positive if f1 > f2, negative if f1 < f2.
+ *
+ * @param f1 - First frequency in Hz (must be positive)
+ * @param f2 - Second frequency in Hz (must be positive)
+ * @returns Interval in cents (100 cents = 1 semitone, 1200 cents = 1 octave)
+ *
+ * @example
+ * centsDistance(880, 440)  // 1200 (one octave up)
+ * centsDistance(440, 440)  // 0 (unison)
+ * centsDistance(466.16, 440)  // ~100 (one semitone up)
+ */
+export const centsDistance = (f1: number, f2: number): number => {
+  if (!Number.isFinite(f1) || !Number.isFinite(f2) || f1 <= 0 || f2 <= 0) {
+    return 0;
+  }
+  return 1200 * Math.log2(f1 / f2);
+};
+
+/**
+ * Returns the nearest integer MIDI pitch for a given frequency.
+ *
+ * @param frequency - Frequency in Hz (must be positive)
+ * @returns Nearest MIDI note number (integer), or 69 (A4) if input is invalid
+ *
+ * @example
+ * nearestMidiPitch(440)    // 69 (A4)
+ * nearestMidiPitch(445)    // 69 (still closest to A4)
+ * nearestMidiPitch(466.16) // 70 (A#4/Bb4)
+ */
+export const nearestMidiPitch = (frequency: number): number => {
+  return Math.round(frequencyToMidi(frequency));
+};

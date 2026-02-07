@@ -92,3 +92,14 @@ export interface NotePlaybackEvent {
 }
 
 export type NoteCharTimeMap = Record<number, number>;
+
+/**
+ * Result of a pitch detection analysis.
+ * Frequency is in Hz, confidence is 0-1 (higher = more reliable).
+ */
+export interface PitchDetectionResult {
+  /** Detected fundamental frequency in Hz */
+  frequency: number;
+  /** Detection confidence / clarity (0 = noise, 1 = pure tone) */
+  confidence: number;
+}

@@ -29,6 +29,9 @@ const BEATS_PER_VERTICAL_SPAN = 4;
 const FALLBACK_PIXELS_PER_SUBDIVISION = 50;
 const NOTE_THICKNESS_RATIO = 0.7;
 
+/** Maximum cents deviation for "in tune" (green). Beyond this, shifts toward red. */
+const IN_TUNE_CENTS = 50;
+
 const getTimestamp = () =>
   typeof performance !== 'undefined' && typeof performance.now === 'function'
     ? performance.now()
@@ -85,6 +88,10 @@ const drawRoundedRect = (
  * - Active note highlighting
  * - Pitch labels on the left side
  * - Frequency range determined by store settings
+ * - HTML-overlaid pitch detection ball (when microphone is active)
+ *
+ * The pitch detection ball is rendered as an HTML overlay on top of the canvas
+ * to avoid triggering expensive full-canvas redraws on every pitch change.
  *
  * All state is read from the Zustand store:
  * - noteTimeline: The notes to display
@@ -105,9 +112,23 @@ export const OtamatoneRoll: React.FC = () => {
   // Subscribe to frequency values to trigger re-render on change
   const lowestNoteHz = useAppStore((state) => state.lowestNoteHz);
   const highestNoteHz = useAppStore((state) => state.highestNoteHz);
+  const detectedPitch = useAppStore((state) => state.detectedPitch);
+  const isMicrophoneActive = useAppStore((state) => state.isMicrophoneActive);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
+
+  // Ref for the HTML pitch ball element — positioned via direct DOM manipulation
+  // to avoid React re-renders triggering canvas redraws
+  const pitchBallRef = useRef<HTMLDivElement>(null);
+
+  // Layout geometry exposed from renderFrame for the HTML pitch ball overlay
+  const layoutRef = useRef<{
+    playheadX: number;
+    playableTop: number;
+    playableHeight: number;
+    innerWidth: number;
+  } | null>(null);
 
   // Extract timeline data from the passed noteTimeline prop (single source of truth)
   const notes = useMemo(() => noteTimeline?.notes ?? [], [noteTimeline?.notes]);
@@ -284,6 +305,9 @@ export const OtamatoneRoll: React.FC = () => {
     const playableTop = innerY + innerHeight * PLAYABLE_EDGE_RATIO;
     const playableBottom = innerY + innerHeight * (1 - PLAYABLE_EDGE_RATIO);
     const playableHeight = Math.max(1, playableBottom - playableTop);
+
+    // Expose layout geometry for the HTML pitch ball overlay
+    layoutRef.current = { playheadX, playableTop, playableHeight, innerWidth };
 
     // Pixels per subdivision - derived from beats per vertical span
     const subdivisionsPerVerticalSpan =
@@ -541,6 +565,81 @@ export const OtamatoneRoll: React.FC = () => {
     });
   }, [measureBoundaries]);
 
+  // Update pitch ball position/color via direct DOM manipulation.
+  // This avoids React re-renders and canvas redraws — only the ball's
+  // CSS properties change, which the browser composites cheaply on the GPU.
+  useEffect(() => {
+    const ball = pitchBallRef.current;
+    if (!ball) return;
+
+    if (!isMicrophoneActive || !detectedPitch || !layoutRef.current) {
+      ball.style.display = 'none';
+      return;
+    }
+
+    // Hide ball when detected pitch is outside the visible frequency range
+    if (
+      detectedPitch.frequency < minFrequency ||
+      detectedPitch.frequency > maxFrequency
+    ) {
+      ball.style.display = 'none';
+      return;
+    }
+
+    const { playheadX, playableTop, playableHeight, innerWidth } =
+      layoutRef.current;
+    const normalized = stemPosition(
+      minFrequency,
+      maxFrequency,
+      detectedPitch.frequency
+    );
+    const ballY = playableTop + normalized * playableHeight;
+    const ballRadius = innerWidth * 0.35;
+    const ballAlpha = Math.max(0.15, Math.min(1, detectedPitch.confidence));
+
+    // Determine color based on tuning accuracy vs currently-playing notes
+    let hue = 200; // neutral blue when no note is expected
+    if (isPlaying && noteTimeline) {
+      const currentSubdivision = secondsToSubdivisions(currentTime) ?? 0;
+      let minCentsDist = Infinity;
+      for (const note of notes) {
+        const diff = note.startSubdivision - currentSubdivision;
+        if (diff <= 0 && diff + note.durationSubdivisions > 0) {
+          const noteFreq = midiToFrequency(note.pitch);
+          const dist = Math.abs(
+            1200 * Math.log2(detectedPitch.frequency / noteFreq)
+          );
+          if (dist < minCentsDist) {
+            minCentsDist = dist;
+          }
+        }
+      }
+      if (minCentsDist < Infinity) {
+        const ratio = Math.min(1, minCentsDist / IN_TUNE_CENTS);
+        hue = 120 * (1 - ratio);
+      }
+    }
+
+    ball.style.display = 'block';
+    ball.style.left = `${playheadX - ballRadius}px`;
+    ball.style.top = `${ballY - ballRadius}px`;
+    ball.style.width = `${ballRadius * 2}px`;
+    ball.style.height = `${ballRadius * 2}px`;
+    ball.style.background = `hsl(${hue}, 80%, 55%)`;
+    ball.style.borderColor = `hsla(${hue}, 60%, 30%, ${ballAlpha})`;
+    ball.style.opacity = `${ballAlpha}`;
+  }, [
+    detectedPitch,
+    isMicrophoneActive,
+    isPlaying,
+    currentTime,
+    notes,
+    noteTimeline,
+    minFrequency,
+    maxFrequency,
+    secondsToSubdivisions,
+  ]);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -639,5 +738,36 @@ export const OtamatoneRoll: React.FC = () => {
   // based on whether the playhead is within the note's duration, rather than
   // relying on timing callback events (which can have tempo mismatches).
 
-  return <canvas ref={canvasRef} className="otamatone-roll-canvas" />;
+  return (
+    <div className="otamatone-roll-wrapper">
+      <canvas ref={canvasRef} className="otamatone-roll-canvas" />
+      <div
+        ref={pitchBallRef}
+        className="otamatone-pitch-ball"
+        style={{ display: 'none' }}
+      />
+      {isMicrophoneActive && (
+        <div
+          className="otamatone-roll-mic-indicator"
+          aria-label="Microphone active"
+          title="Microphone active"
+        >
+          <svg
+            width="14"
+            height="18"
+            viewBox="0 0 14 18"
+            fill="none"
+            stroke="#4ade80"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          >
+            <rect x="4" y="0.5" width="6" height="9" rx="3" />
+            <path d="M13 7v0.5a6 6 0 0 1-12 0V7" />
+            <line x1="7" y1="13.5" x2="7" y2="16" />
+            <line x1="4" y1="16" x2="10" y2="16" />
+          </svg>
+        </div>
+      )}
+    </div>
+  );
 };
