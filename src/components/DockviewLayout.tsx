@@ -80,6 +80,8 @@ const ViewMenu = ({ visibility, onToggle }: ViewMenuProps) => {
   const highestNoteHz = useAppStore((state) => state.highestNoteHz);
   const setLowestNoteHz = useAppStore((state) => state.setLowestNoteHz);
   const setHighestNoteHz = useAppStore((state) => state.setHighestNoteHz);
+  const showPitchDebug = useAppStore((state) => state.showPitchDebug);
+  const setShowPitchDebug = useAppStore((state) => state.setShowPitchDebug);
 
   // Local state for input values (for responsive typing)
   // When null, display from store; when string, display local pending value
@@ -304,6 +306,30 @@ const ViewMenu = ({ visibility, onToggle }: ViewMenuProps) => {
                 <span className="view-menu-unit">Hz</span>
               </div>
             </div>
+            <button
+              className="view-menu-item"
+              role="menuitemcheckbox"
+              aria-checked={showPitchDebug}
+              onClick={() => setShowPitchDebug(!showPitchDebug)}
+            >
+              <span className="view-menu-checkbox">
+                {showPitchDebug && (
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </span>
+              <span>Pitch debug info</span>
+            </button>
           </div>
         </div>
       )}

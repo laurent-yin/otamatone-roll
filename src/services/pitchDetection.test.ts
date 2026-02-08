@@ -5,11 +5,6 @@ import {
   MAX_FREQUENCY_HZ,
 } from './pitchDetection';
 
-// Mock pitchfinder
-vi.mock('pitchfinder', () => ({
-  YIN: () => () => 440,
-}));
-
 // Mock Web Audio API
 const mockAnalyserNode = {
   fftSize: 2048,

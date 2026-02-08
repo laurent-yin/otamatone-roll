@@ -3,6 +3,7 @@ import { DockviewLayout } from './components/DockviewLayout';
 import { useAppStore } from './store/appStore';
 import { buildTimelinePreviewImage } from './utils/timelinePreview';
 import { usePitchDetection } from './hooks/usePitchDetection';
+import { midiToNoteName, nearestMidiPitch } from './utils/frequency';
 import {
   DEFAULT_HIGHEST_FREQUENCY,
   DEFAULT_LOWEST_FREQUENCY,
@@ -40,6 +41,8 @@ const App = () => {
   const setIsMicrophoneActive = useAppStore(
     (state) => state.setIsMicrophoneActive
   );
+  const detectedPitch = useAppStore((state) => state.detectedPitch);
+  const showPitchDebug = useAppStore((state) => state.showPitchDebug);
   // Subscribe to frequency values to trigger re-render when they change
   const lowestNoteHz = useAppStore((state) => state.lowestNoteHz);
   const highestNoteHz = useAppStore((state) => state.highestNoteHz);
@@ -172,6 +175,37 @@ const App = () => {
               )}
             </svg>
           </button>
+          {isMicrophoneActive && showPitchDebug && (
+            <div className="pitch-debug-box">
+              {detectedPitch ? (
+                <>
+                  <span className="pitch-debug-note">
+                    {midiToNoteName(nearestMidiPitch(detectedPitch.frequency))}
+                  </span>
+                  <span className="pitch-debug-freq">
+                    {detectedPitch.frequency.toFixed(1)} Hz
+                  </span>
+                  <span className="pitch-debug-detail">
+                    raw: {detectedPitch.rawFrequency.toFixed(1)} Hz
+                  </span>
+                  <span className="pitch-debug-detail">
+                    prob: {(detectedPitch.probability * 100).toFixed(0)}%
+                  </span>
+                  {detectedPitch.hysteresisActive && (
+                    <span className="pitch-debug-hyst">HYST</span>
+                  )}
+                  {(detectedPitch.frequency < lowestNoteHz ||
+                    detectedPitch.frequency > highestNoteHz) && (
+                    <span className="pitch-debug-warning">
+                      OUT ({lowestNoteHz.toFixed(0)}-{highestNoteHz.toFixed(0)})
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="pitch-debug-none">No pitch detected</span>
+              )}
+            </div>
+          )}
           <div
             id={AUDIO_CONTROLS_ID}
             className="abc-audio-controls app-header-audio-controls"

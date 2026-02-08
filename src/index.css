@@ -114,6 +114,77 @@ body {
   background: #1a4a30;
 }
 
+/* Pitch detection debug display */
+.pitch-debug-toggle {
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #666;
+  font-family: monospace;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.pitch-debug-toggle:hover {
+  border-color: #666;
+  color: #aaa;
+}
+
+.pitch-debug-toggle.active {
+  border-color: #7cf;
+  color: #7cf;
+}
+
+.pitch-debug-box {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 2px 8px;
+  background: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #ccc;
+  white-space: nowrap;
+  width: 340px;
+  min-width: 340px;
+  overflow: hidden;
+}
+
+.pitch-debug-note {
+  font-weight: bold;
+  color: #7cf;
+  font-size: 14px;
+}
+
+.pitch-debug-freq {
+  color: #aaa;
+}
+
+.pitch-debug-warning {
+  color: #f66;
+  font-weight: bold;
+  font-size: 10px;
+}
+
+.pitch-debug-none {
+  color: #666;
+  font-style: italic;
+}
+
+.pitch-debug-detail {
+  color: #888;
+  font-size: 11px;
+}
+
+.pitch-debug-hyst {
+  color: #fa0;
+  font-weight: bold;
+  font-size: 10px;
+}
+
 .frequency-form {
   display: flex;
   flex-wrap: wrap;

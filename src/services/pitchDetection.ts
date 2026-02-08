@@ -1,5 +1,87 @@
-import { YIN } from 'pitchfinder';
 import type { PitchDetectionResult } from '../types/music';
+
+/** Result from the custom YIN wrapper including probability */
+interface YinResult {
+  frequency: number;
+  probability: number;
+}
+
+/**
+ * Custom YIN pitch detection implementation that exposes the probability
+ * (periodicity) value that pitchfinder's YIN computes internally but doesn't return.
+ * Based on the YIN paper by de Cheveigné & Kawahara (2002).
+ *
+ * @param sampleRate - Audio sample rate in Hz
+ * @param threshold - Aperiodicity threshold (0–1). Lower = more permissive.
+ * @returns A function that takes a Float32Array audio buffer and returns { frequency, probability } or null
+ */
+function createYinDetector(
+  sampleRate: number,
+  threshold: number
+): (buf: Float32Array) => YinResult | null {
+  return (float32AudioBuffer: Float32Array): YinResult | null => {
+    // Buffer size = highest power of two <= input length
+    let bufferSize = 1;
+    while (bufferSize < float32AudioBuffer.length) bufferSize *= 2;
+    bufferSize /= 2;
+
+    const halfSize = bufferSize / 2;
+    const yinBuffer = new Float32Array(halfSize);
+
+    // Step 2: Difference function
+    for (let t = 1; t < halfSize; t++) {
+      let sum = 0;
+      for (let i = 0; i < halfSize; i++) {
+        const delta = float32AudioBuffer[i]! - float32AudioBuffer[i + t]!;
+        sum += delta * delta;
+      }
+      yinBuffer[t] = sum;
+    }
+
+    // Step 3: Cumulative mean normalized difference
+    yinBuffer[0] = 1;
+    let runningSum = 0;
+    for (let t = 1; t < halfSize; t++) {
+      runningSum += yinBuffer[t]!;
+      yinBuffer[t]! *= t / runningSum;
+    }
+
+    // Step 4: Absolute threshold
+    let tau = -1;
+    let probability = 0;
+    for (let t = 2; t < halfSize; t++) {
+      if (yinBuffer[t]! < threshold) {
+        while (t + 1 < halfSize && yinBuffer[t + 1]! < yinBuffer[t]!) t++;
+        probability = 1 - yinBuffer[t]!;
+        tau = t;
+        break;
+      }
+    }
+
+    if (tau === -1) return null;
+
+    // Step 5: Parabolic interpolation
+    let betterTau: number;
+    const x0 = tau < 1 ? tau : tau - 1;
+    const x2 = tau + 1 < halfSize ? tau + 1 : tau;
+
+    if (x0 === tau) {
+      betterTau = yinBuffer[tau]! <= yinBuffer[x2]! ? tau : x2;
+    } else if (x2 === tau) {
+      betterTau = yinBuffer[tau]! <= yinBuffer[x0]! ? tau : x0;
+    } else {
+      const s0 = yinBuffer[x0]!;
+      const s1 = yinBuffer[tau]!;
+      const s2 = yinBuffer[x2]!;
+      betterTau = tau + (s2 - s0) / (2 * (2 * s1 - s2 - s0));
+    }
+
+    return {
+      frequency: sampleRate / betterTau,
+      probability,
+    };
+  };
+}
 
 /** Minimum detectable frequency in Hz (filters out sub-bass noise) */
 export const MIN_FREQUENCY_HZ = 50;
@@ -52,7 +134,7 @@ export class PitchDetectionService {
   private mediaStream: MediaStream | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private analyserNode: AnalyserNode | null = null;
-  private detectPitch: ((buf: Float32Array) => number | null) | null = null;
+  private detectPitch: ((buf: Float32Array) => YinResult | null) | null = null;
   private animationFrameId: number | null = null;
   private inputBuffer: Float32Array<ArrayBuffer> | null = null;
   private running = false;
@@ -97,10 +179,10 @@ export class PitchDetectionService {
     this.inputBuffer = new Float32Array(
       analyser.fftSize
     ) as Float32Array<ArrayBuffer>;
-    this.detectPitch = YIN({
-      sampleRate: audioContext.sampleRate,
-      threshold: YIN_THRESHOLD,
-    });
+    this.detectPitch = createYinDetector(
+      audioContext.sampleRate,
+      YIN_THRESHOLD
+    );
 
     this.running = true;
     this.detect();
@@ -166,15 +248,23 @@ export class PitchDetectionService {
     if (this.analyserNode && this.inputBuffer && this.detectPitch) {
       this.analyserNode.getFloatTimeDomainData(this.inputBuffer);
 
-      const rawFrequency = this.detectPitch(this.inputBuffer);
+      const result = this.detectPitch(this.inputBuffer);
 
       if (
-        rawFrequency !== null &&
-        rawFrequency >= MIN_FREQUENCY_HZ &&
-        rawFrequency <= MAX_FREQUENCY_HZ
+        result !== null &&
+        result.frequency >= MIN_FREQUENCY_HZ &&
+        result.frequency <= MAX_FREQUENCY_HZ
       ) {
+        const { frequency: rawFrequency, probability } = result;
         const frequency = this.applyOctaveHysteresis(rawFrequency);
-        this.onPitch({ frequency, confidence: 1 });
+        const hysteresisActive = frequency !== rawFrequency;
+        this.onPitch({
+          frequency,
+          confidence: probability,
+          rawFrequency,
+          probability,
+          hysteresisActive,
+        });
       } else {
         this.onPitch(null);
       }

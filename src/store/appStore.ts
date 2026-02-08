@@ -62,6 +62,8 @@ export interface AppState {
   setIsMicrophoneActive: (active: boolean) => void;
   detectedPitch: PitchDetectionResult | null;
   setDetectedPitch: (pitch: PitchDetectionResult | null) => void;
+  showPitchDebug: boolean;
+  setShowPitchDebug: (show: boolean) => void;
 }
 
 // State that should be persisted to localStorage
@@ -69,6 +71,7 @@ interface PersistedState {
   notation: string;
   lowestNoteHz: number;
   highestNoteHz: number;
+  showPitchDebug: boolean;
 }
 
 /**
@@ -143,6 +146,8 @@ export const useAppStore = create<AppState>()(
           set({ isMicrophoneActive }),
         detectedPitch: null,
         setDetectedPitch: (detectedPitch) => set({ detectedPitch }),
+        showPitchDebug: false,
+        setShowPitchDebug: (showPitchDebug) => set({ showPitchDebug }),
 
         // Computed values
         getSanitizedLowestNoteHz: () => {
@@ -174,6 +179,7 @@ export const useAppStore = create<AppState>()(
           notation: state.notation,
           lowestNoteHz: state.lowestNoteHz,
           highestNoteHz: state.highestNoteHz,
+          showPitchDebug: state.showPitchDebug,
         }),
       }
     ),

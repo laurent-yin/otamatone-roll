@@ -98,8 +98,14 @@ export type NoteCharTimeMap = Record<number, number>;
  * Frequency is in Hz, confidence is 0-1 (higher = more reliable).
  */
 export interface PitchDetectionResult {
-  /** Detected fundamental frequency in Hz */
+  /** Detected fundamental frequency in Hz (after hysteresis) */
   frequency: number;
   /** Detection confidence / clarity (0 = noise, 1 = pure tone) */
   confidence: number;
+  /** Raw frequency from YIN before octave hysteresis (for debugging) */
+  rawFrequency: number;
+  /** YIN periodicity probability (0-1, higher = more periodic signal) */
+  probability: number;
+  /** Whether octave hysteresis suppressed a jump this frame */
+  hysteresisActive: boolean;
 }
